@@ -12,7 +12,7 @@
   <section class="wira">
     <div class="kad sapa">
       <h1>Pembelajaran Di Rumah</h1>
-      <p>Lihat jadual kelas anak anda dan buka lembaran kerja, pautan serta bahan yang disediakan oleh guru bagi setiap waktu.</p>
+      <p>Cari kelas anak anda untuk melihat jadual, lembaran kerja dan bahan daripada guru.</p>
       <div class="butang-baris">
         <a class="btn" href="kelas.html">Lihat Jadual Kelas</a>
         <a class="btn kedua" href="login.html">Log Masuk Guru</a>
@@ -29,6 +29,12 @@
     </div>
   </section>
 
+  <div class="cari-kelas" id="kotak-cari">
+    <div class="kotak"><span class="ik-cari" id="ik-cari"></span>
+      <input type="search" id="cari" placeholder="Cari kelas… cth: raub, 4, pra" autocomplete="off" enterkeyhint="go" aria-label="Cari kelas"></div>
+    <div class="terakhir" id="terakhir" hidden></div>
+  </div>
+
   <div id="senarai"><p class="memuat">Memuatkan senarai kelas…</p></div>
 </main>
 
@@ -36,12 +42,38 @@
   import { pasangRangka, hariIni, hariBekerja, tambahHari, formatTarikh, esc } from './assets/js/ui.js';
   import { muatJadual, statusPdpr, kelasTerlibat, bahanTarikh } from './assets/js/data.js';
   import { indeksHari, sesiHari } from './assets/js/jadual.js';
+  import { padanKelas, susunKelas, kelasTerakhir, ikonCari } from './assets/js/cari-kelas.js';
 
   pasangRangka('index.html');
 
   const $ = (id) => document.getElementById(id);
   const kini = hariIni();
-  const elStatus = $('status'), elSenarai = $('senarai'), elTarikh = $('tarikh');
+  const elStatus = $('status'), elSenarai = $('senarai'), elTarikh = $('tarikh'), elCari = $('cari');
+  $('ik-cari').innerHTML = ikonCari;
+  let jadualSemasa = null;
+
+  // Tapis kad kelas mengikut carian (tanpa memuat semula data)
+  function tapis() {
+    if (!jadualSemasa) return;
+    const q = elCari.value;
+    let ada = 0;
+    elSenarai.querySelectorAll('.kelas-kad').forEach((a) => {
+      const ok = padanKelas(q, jadualSemasa.kelas[a.dataset.id]);
+      a.hidden = !ok; if (ok) ada++;
+    });
+    elSenarai.querySelectorAll('[data-kump]').forEach((g) => (g.hidden = !g.querySelector('.kelas-kad:not([hidden])')));
+    let tiada = elSenarai.querySelector('.tiada-padanan');
+    if (!ada) {
+      if (!tiada) { tiada = document.createElement('p'); tiada.className = 'tiada-padanan'; elSenarai.append(tiada); }
+      tiada.textContent = `Tiada kelas sepadan dengan "${q}".`;
+    } else tiada?.remove();
+  }
+  elCari.oninput = tapis;
+  elCari.onkeydown = (e) => {
+    if (e.key !== 'Enter') return;
+    const pertama = elSenarai.querySelector('.kelas-kad:not([hidden])');
+    if (pertama) location.href = pertama.href;
+  };
   const p = new URLSearchParams(location.search);
   // Lalai: hari ini (atau hari persekolahan seterusnya jika hujung minggu)
   elTarikh.value = /^\d{4}-\d{2}-\d{2}$/.test(p.get('t') || '') ? p.get('t') : hariBekerja(kini, 1);
@@ -83,25 +115,32 @@
       const kiraBahan = {};
       bahan.forEach((b) => (b.kelasIds || []).forEach((k) => (kiraBahan[k] = (kiraBahan[k] || 0) + 1)));
 
-      const susun = (a, b) => a[1].nama.localeCompare(b[1].nama, 'ms', { numeric: true });
-      const semua = Object.entries(jadual.kelas).sort(susun);
+      jadualSemasa = jadual;
+      const semua = susunKelas(jadual.kelas);
+
+      // Kelas terakhir dilihat di peranti ini
+      const terakhir = kelasTerakhir().filter((id) => jadual.kelas[id]);
+      $('terakhir').hidden = !terakhir.length;
+      $('terakhir').innerHTML = terakhir.length ? `<span class="lembut">Terakhir dilihat:</span>` +
+        terakhir.map((id) => `<a class="cip" href="kelas.html?k=${jadual.kelas[id].slug}&t=${t}">${esc(jadual.kelas[id].nama)}</a>`).join('') : '';
       const kumpulan = [
         ['Prasekolah', semua.filter(([, k]) => k.jenis === 'pra')],
         ['Tahun 1 – 6', semua.filter(([, k]) => k.jenis !== 'pra')],
       ].filter(([, s]) => s.length);
 
-      elSenarai.innerHTML = kumpulan.map(([tajuk, senarai]) => `
+      elSenarai.innerHTML = kumpulan.map(([tajuk, senarai]) => `<div data-kump>
         <div class="seksyen-tajuk"><h2>${tajuk}</h2><span class="lembut">${senarai.length} kelas</span></div>
         <div class="grid-kelas">${senarai.map(([id, k]) => {
           const nSesi = h >= 0 ? sesiHari(jadual, h, { kelasId: id }).length : 0;
           const terlibat = kelasTerlibat(status, id);
           const n = kiraBahan[id] || 0;
           const ket = h < 0 ? 'hujung minggu' : `${nSesi} sesi · ${terlibat ? `${n} bahan` : 'tiada PDPR'}`;
-          return `<a class="kelas-kad ${terlibat && n ? 'ada-bahan' : ''}" href="kelas.html?k=${k.slug}&t=${t}">
+          return `<a class="kelas-kad ${terlibat && n ? 'ada-bahan' : ''}" data-id="${id}" href="kelas.html?k=${k.slug}&t=${t}">
             <b>${esc(k.nama)}</b>
             <small>${ket}</small>
           </a>`;
-        }).join('')}</div>`).join('');
+        }).join('')}</div></div>`).join('');
+      tapis();
     } catch (e) {
       console.error(e);
       elSenarai.innerHTML = `<div class="notis amaran">Gagal memuatkan data. Sila cuba muat semula halaman.</div>`;

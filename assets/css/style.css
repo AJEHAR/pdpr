@@ -52,10 +52,17 @@ h3 { font-size: 1rem; font-weight: 700; }
 .topbar nav a[aria-current] { opacity: 1; background: rgb(255 255 255 / 16%); }
 .menu-btn { display: none; margin-left: auto; background: none; border: 0; color: #fff; font-size: 1.5rem; cursor: pointer; }
 @media (max-width: 700px) {
-  .menu-btn { display: block; }
-  .topbar { flex-wrap: wrap; }
-  .topbar nav { display: none; width: 100%; flex-direction: column; margin: 0; }
+  /* Header mobile: satu baris sahaja; menu muncul sebagai senarai di bawah header */
+  .topbar { padding: 8px 12px; gap: 10px; }
+  .topbar > .jenama { flex: 1; }
+  .topbar .jenama-logo { width: 34px; height: 34px; }
+  .topbar .jenama-teks b { font-size: .95rem; }
+  .topbar .jenama-teks small { font-size: .66rem; }
+  .menu-btn { display: block; flex: none; padding: 4px 6px; line-height: 1; }
+  .topbar nav { display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; margin: 0;
+    background: var(--utama); padding: 4px 12px 12px; box-shadow: 0 10px 20px rgb(0 0 0 / 18%); }
   .topbar.buka nav { display: flex; }
+  .topbar nav a { padding: 12px; }
 }
 .demo-bar { background: var(--aksen-cair); color: #7a4f0d; font-size: .82rem; text-align: center; padding: 6px 16px; }
 .kaki { text-align: center; color: var(--lembut); font-size: .8rem; padding: 20px 16px; border-top: 1px solid var(--garis); }
@@ -197,6 +204,44 @@ body.app .toast-bekas { bottom: 96px; }
 /* ---------- Laman utama ---------- */
 .wira { display: grid; gap: 20px; grid-template-columns: 1.4fr 1fr; align-items: stretch; margin-bottom: 28px; }
 @media (max-width: 760px) { .wira { grid-template-columns: 1fr; } }
+@media (max-width: 760px) {
+  /* Kad wira ringkas di telefon */
+  .wira { gap: 12px; margin-bottom: 16px; }
+  .wira .sapa { padding: 18px; }
+  .wira .sapa h1 { font-size: 1.3rem; margin-bottom: .2em; }
+  .wira .sapa p { font-size: .88rem; margin: 0; }
+  .wira .sapa .butang-baris { margin-top: 12px; flex-wrap: nowrap; gap: 8px; }
+  .wira .sapa .btn { flex: 1; padding: 10px 8px; font-size: .88rem; }
+  .status-hari { padding: 14px 16px; }
+  .status-hari .besar { font-size: 1.15rem; }
+  .pilih-tarikh { margin-bottom: 8px; }
+}
+/* Carian kelas */
+.cari-kelas { position: sticky; top: 64px; z-index: 5; background: var(--bg); padding: 8px 0 10px; margin: 8px 0 0; }
+.cari-kelas .kotak { position: relative; }
+.cari-kelas input { padding-left: 42px; font-size: 1rem; height: 48px; border-radius: 12px; box-shadow: var(--bayang); }
+.cari-kelas .ik-cari { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--lembut); pointer-events: none; }
+.cari-kelas .terakhir { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: .82rem; align-items: center; }
+.cip { display: inline-flex; align-items: center; gap: 4px; padding: 5px 12px; border-radius: 99px; background: var(--kad); border: 1px solid var(--garis);
+  color: var(--utama); font-weight: 700; text-decoration: none; font-size: .82rem; cursor: pointer; font-family: inherit; }
+.cip:hover { border-color: var(--utama-2); }
+@media (max-width: 700px) { .cari-kelas { top: 50px; } }
+.tiada-padanan { text-align: center; color: var(--lembut); padding: 24px 0; }
+@media (max-width: 480px) { .grid-kelas { grid-template-columns: repeat(2, 1fr); gap: 8px; } .kelas-kad { padding: 12px; } }
+
+/* Pemilih kelas (halaman kelas) */
+.btn-pilih-kelas { width: 100%; justify-content: space-between; background: var(--kad); color: var(--teks); border: 1px solid var(--garis); font-weight: 700; padding: 10px 12px; }
+.btn-pilih-kelas:hover { background: var(--utama-cair); }
+.btn-pilih-kelas .lembut { font-weight: 500; }
+.helaian-kelas .helaian-isi { max-height: 85vh; display: flex; flex-direction: column; }
+.helaian-kelas .senarai-pilih { overflow-y: auto; flex: 1; padding-bottom: 8px; }
+.helaian-kelas .grid-kelas { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.helaian-kelas .kelas-kad { padding: 12px; align-items: flex-start; text-align: left; font: inherit; cursor: pointer; }
+.helaian-kelas .kelas-kad[aria-current] { border-color: var(--utama); background: var(--utama-cair); }
+@media (min-width: 700px) {
+  .helaian-kelas .helaian-isi { inset: 50% auto auto 50%; transform: translate(-50%, -50%); width: min(640px, 92vw); border-radius: 20px; }
+  .helaian-kelas .helaian-pegang { display: none; }
+}
 .wira .sapa { padding: 28px; background: linear-gradient(135deg, var(--utama), #0b4a3e); color: #fff; border: 0; }
 .wira .sapa p { opacity: .9; max-width: 46ch; }
 .wira .sapa .btn { background: #fff; color: var(--utama); }

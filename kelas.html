@@ -9,12 +9,13 @@
 <body>
 <main>
   <h1>Jadual Kelas</h1>
-  <p class="lembut">Pilih kelas dan tarikh untuk melihat bahan pembelajaran bagi setiap waktu.</p>
+  <p class="lembut">Cari kelas dan pilih tarikh untuk melihat bahan pembelajaran bagi setiap waktu.</p>
 
   <form class="penapis kad" id="penapis" onsubmit="return false">
     <div>
-      <label for="kelas">Kelas</label>
-      <select id="kelas"></select>
+      <label for="btn-kelas">Kelas</label>
+      <input type="hidden" id="kelas">
+      <button type="button" class="btn btn-pilih-kelas" id="btn-kelas"><span id="nama-kelas" class="lembut">Cari / pilih kelas…</span><span id="ik-kelas"></span></button>
     </div>
     <div>
       <label for="tarikh">Tarikh</label>
@@ -35,6 +36,7 @@
   import { muatJadual, statusPdpr, kelasTerlibat, bahanKelas, muatTetapan } from './assets/js/data.js';
   import { bukaBorangKerja, hantaranPeranti } from './assets/js/hantar-kerja.js';
   import { indeksHari, sesiHari, labelWaktu } from './assets/js/jadual.js';
+  import { bukaPilihKelas, catatKelas, ikonCari } from './assets/js/cari-kelas.js';
 
   pasangRangka('kelas.html');
 
@@ -53,20 +55,23 @@
   };
 
   const jadual = await muatJadual();
-  const senaraiKelas = Object.entries(jadual.kelas).sort((a, b) => a[1].nama.localeCompare(b[1].nama, 'ms', { numeric: true }));
-  const pra = senaraiKelas.filter(([, k]) => k.jenis === 'pra');
-  const biasa = senaraiKelas.filter(([, k]) => k.jenis !== 'pra');
-  const opsyen = (s) => s.map(([id, k]) => `<option value="${id}">${esc(k.nama)}</option>`).join('');
-  elKelas.innerHTML = `<option value="">— Pilih kelas —</option>` +
-    (pra.length ? `<optgroup label="Prasekolah">${opsyen(pra)}</optgroup>` : '') +
-    `<optgroup label="Tahun 1 – 6">${opsyen(biasa)}</optgroup>`;
+  const senaraiKelas = Object.entries(jadual.kelas);
+  $('ik-kelas').innerHTML = ikonCari;
+  const tunjukKelas = () => {
+    const k = jadual.kelas[elKelas.value];
+    $('nama-kelas').textContent = k ? k.nama : 'Cari / pilih kelas…';
+    $('nama-kelas').className = k ? '' : 'lembut';
+  };
+  const pilihKelas = () => bukaPilihKelas({ kelas: jadual.kelas, semasa: elKelas.value, onPilih: (id) => { elKelas.value = id; tunjukKelas(); papar(); } });
+  $('btn-kelas').onclick = pilihKelas;
 
   // Baca parameter URL: ?k=4-raub&t=2026-10-12
   const p = new URLSearchParams(location.search);
   const slug = p.get('k');
   const dariSlug = senaraiKelas.find(([, k]) => k.slug === slug);
   if (dariSlug) elKelas.value = dariSlug[0];
-  else { try { elKelas.value = localStorage.getItem('pdpr-kelas') || ''; } catch {} }
+  else { try { const id = localStorage.getItem('pdpr-kelas') || ''; if (jadual.kelas[id]) elKelas.value = id; } catch {} }
+  tunjukKelas();
   elTarikh.value = /^\d{4}-\d{2}-\d{2}$/.test(p.get('t') || '') ? p.get('t') : hariBekerja(hariIni(), 1);
 
   const tetapanP = muatTetapan(); // URL Apps Script & had saiz untuk hantar kerja
@@ -76,9 +81,14 @@
     const k = jadual.kelas[kelasId];
     if (k) {
       history.replaceState(null, '', `?k=${k.slug}&t=${tarikh}`);
-      try { localStorage.setItem('pdpr-kelas', kelasId); } catch {}
+      catatKelas(kelasId);
     }
-    if (!k) { elHasil.innerHTML = `<div class="kosong"><div class="ikon">🏫</div><p>Pilih kelas untuk melihat jadual.</p></div>`; return; }
+    if (!k) {
+      elHasil.innerHTML = `<div class="kosong"><div class="ikon">🏫</div><p>Pilih kelas untuk melihat jadual.</p>
+        <button class="btn" id="btn-kosong">Cari kelas</button></div>`;
+      $('btn-kosong').onclick = pilihKelas;
+      return;
+    }
 
     const h = indeksHari(tarikh);
     if (h < 0) {
@@ -158,7 +168,6 @@
     };
   }
 
-  elKelas.onchange = papar;
   elTarikh.onchange = papar;
   $('sebelum').onclick = () => { elTarikh.value = hariBekerja(tambahHari(elTarikh.value, -1), -1); papar(); };
   $('selepas').onclick = () => { elTarikh.value = hariBekerja(tambahHari(elTarikh.value, 1), 1); papar(); };
