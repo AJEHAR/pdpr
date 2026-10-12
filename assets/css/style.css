@@ -202,6 +202,11 @@ body.app .toast-bekas { bottom: 96px; }
 .wira .sapa .btn { background: #fff; color: var(--utama); }
 .wira .sapa .btn.kedua { background: transparent; color: #fff; border-color: rgb(255 255 255 / 40%); }
 .status-hari { display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+.pilih-tarikh { margin-bottom: 14px; flex-wrap: wrap; }
+#status { display: flex; flex-direction: column; gap: 6px; }
+.pilih-tarikh input { width: auto; flex: 1; min-width: 150px; padding: 7px 10px; }
+.pilih-tarikh .btn { padding: 7px 12px; }
+.kelas-kad.ada-bahan { border-color: #b7dccd; background: linear-gradient(var(--utama-cair), var(--kad) 70%); }
 .status-hari .besar { font-size: 1.5rem; font-weight: 800; }
 .titik { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #aaa; margin-right: 6px; }
 .titik.on { background: #1aa36f; box-shadow: 0 0 0 4px rgb(26 163 111 / 18%); }
@@ -236,6 +241,12 @@ a.sesi:hover { border-color: var(--utama-2); }
 .bahan .ikon { flex: none; font-size: 1.15rem; }
 .bahan .catatan { font-weight: 400; color: var(--lembut); font-size: .82rem; display: block; }
 .belum-teks { font-size: .85rem; color: var(--lembut); font-style: italic; }
+.hantar-baris { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--garis); }
+.borang-kerja { z-index: 50; }
+@media (min-width: 700px) {
+  .borang-kerja .helaian-isi { inset: 50% auto auto 50%; transform: translate(-50%, -50%); width: min(540px, 92vw); border-radius: 20px; padding-bottom: 20px; }
+  .borang-kerja .helaian-pegang { display: none; }
+}
 .rehat { text-align: center; font-size: .78rem; font-weight: 700; letter-spacing: .08em; color: var(--lembut); padding: 2px; }
 @media (max-width: 480px) { .sesi { grid-template-columns: 76px 1fr; } }
 

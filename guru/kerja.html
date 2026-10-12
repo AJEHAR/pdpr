@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kerja Murid · Portal PDPR</title>
+  <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main>
+  <div class="kepala">
+    <div>
+      <h1>Kerja Murid</h1>
+      <p class="lembut">Kerja yang dihantar oleh murid / ibu bapa bagi setiap sesi.</p>
+    </div>
+    <div class="nav-hari" style="flex-wrap:wrap">
+      <select id="kelas" hidden style="width:auto"></select>
+      <button class="btn kedua kecil" id="sebelum" aria-label="Hari sebelum"></button>
+      <input type="date" id="tarikh" style="width:auto">
+      <button class="btn kedua kecil" id="selepas" aria-label="Hari selepas"></button>
+    </div>
+  </div>
+  <div class="statistik" id="statistik"></div>
+  <div id="isi"><p class="memuat">Memuatkan…</p></div>
+</main>
+
+<script type="module">
+  import { kawal, adalahAdmin } from '../assets/js/auth.js';
+  import { pasangApp, esc, ikon, hariIni, hariBekerja, tambahHari, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
+  import { muatJadual, statusPdpr, kelasTerlibat, hantaranJulat, muatTetapan } from '../assets/js/data.js';
+  import { sesiHari, indeksHari, labelWaktu } from '../assets/js/jadual.js';
+  import { bukaKerjaMurid } from '../assets/js/upload.js';
+
+  const sesiAuth = await kawal('guru');
+  await pasangApp('guru/kerja.html', sesiAuth);
+  const { profil } = sesiAuth;
+
+  const $ = (id) => document.getElementById(id);
+  $('sebelum').innerHTML = ikon('kiri', 18);
+  $('selepas').innerHTML = ikon('kanan', 18);
+  const tetapanP = muatTetapan();
+  const p = new URLSearchParams(location.search);
+  $('tarikh').value = /^\d{4}-\d{2}-\d{2}$/.test(p.get('t') || '') ? p.get('t') : hariBekerja(hariIni(), -1);
+  const fokus = p.get('sesi');
+
+  // Admin boleh lihat ikut kelas; guru lihat sesi sendiri
+  const admin = adalahAdmin(profil);
+  if (admin) {
+    const j = await muatJadual();
+    const ks = Object.entries(j.kelas).sort((a, b) => a[1].nama.localeCompare(b[1].nama, 'ms', { numeric: true }));
+    $('kelas').innerHTML = (profil.guruId ? `<option value="">Sesi saya</option>` : `<option value="">— Pilih kelas —</option>`) +
+      ks.map(([id, k]) => `<option value="${id}">${esc(k.nama)}</option>`).join('');
+    $('kelas').hidden = false;
+    $('kelas').value = p.get('k') || '';
+  }
+
+  const masaPendek = (iso) => iso ? new Date(iso).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' }) : '';
+  let data = [];
+
+  async function muat() {
+    const t = $('tarikh').value, kelasId = $('kelas').value || '';
+    history.replaceState(null, '', `?t=${t}${kelasId ? '&k=' + kelasId : ''}`);
+    const h = indeksHari(t);
+    $('statistik').innerHTML = '';
+    if (h < 0) { $('isi').innerHTML = `<div class="kosong"><div class="ikon">🌤️</div><p>Hujung minggu.</p></div>`; return; }
+    if (!kelasId && !profil.guruId) { $('isi').innerHTML = `<div class="kosong"><p>Pilih kelas.</p></div>`; return; }
+    $('isi').innerHTML = `<p class="memuat">Memuatkan…</p>`;
+
+    const [jd, status, hantaran] = await Promise.all([muatJadual(t), statusPdpr(t), hantaranJulat(t, t)]);
+    data = hantaran;
+    const sesi = sesiHari(jd, h, kelasId ? { kelasId } : { guruId: profil.guruId }).filter((s) => kelasTerlibat(status, s.kelas));
+    if (!status.aktif || !sesi.length) {
+      $('isi').innerHTML = `<div class="kosong"><div class="ikon">📭</div><p>${status.aktif ? 'Tiada sesi PDPR untuk dipaparkan.' : 'Bukan hari PDPR.'}</p></div>`;
+      return;
+    }
+
+    const ikutSesi = {};
+    for (const x of hantaran) (ikutSesi[x.sesi] ??= []).push(x);
+    const murid = (id) => new Set((ikutSesi[id] || []).map((x) => x.namaMurid.trim().toUpperCase())).size;
+    const jumlahMurid = new Set(sesi.flatMap((s) => (ikutSesi[s.id] || []).map((x) => x.kelasId + x.namaMurid.trim().toUpperCase()))).size;
+    $('statistik').innerHTML = `
+      <div class="stat"><small>Sesi PDPR</small><b>${sesi.length}</b></div>
+      <div class="stat"><small>Sesi ada kerja murid</small><b>${sesi.filter((s) => murid(s.id)).length}</b></div>
+      <div class="stat"><small>Murid menghantar</small><b>${jumlahMurid}</b></div>
+      <div class="stat"><small>Jumlah hantaran</small><b>${sesi.reduce((n, s) => n + (ikutSesi[s.id]?.length || 0), 0)}</b></div>`;
+
+    $('isi').innerHTML = `<div class="senarai-sesi">${sesi.map((s) => {
+      const senarai = ikutSesi[s.id] || [];
+      const kump = {};
+      senarai.forEach((x) => (kump[x.namaMurid.trim().toUpperCase()] ??= []).push(x));
+      return `<article class="kad" id="s-${esc(s.id)}" ${s.id === fokus ? 'style="outline:2px solid var(--aksen)"' : ''}>
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline">
+          <h3 style="margin:0">${esc(jd.kelas[s.kelas]?.nama)} · ${esc(jd.subjek[s.subjek]?.nama)}</h3>
+          <span class="lencana ${senarai.length ? '' : 'tiada'}">${Object.keys(kump).length} murid</span>
+        </div>
+        <p class="kecil lembut" style="margin:2px 0 10px">${s.harian ? 'Aktiviti harian' : `${s.mula}–${s.tamat} · ${labelWaktu(s.waktu)}`}</p>
+        ${senarai.length ? `<div class="balut-jadual"><table class="jadual-data jadual-kad">
+          <thead><tr><th>Murid</th><th>Kerja</th><th>Catatan</th></tr></thead>
+          <tbody>${Object.entries(kump).map(([, xs]) => `<tr>
+            <td><b>${esc(xs[0].namaMurid)}</b><div class="kecil lembut">${masaPendek(xs[0].masa)}</div></td>
+            <td data-label="Kerja">${xs.map((x) => x.jenis === 'pautan'
+              ? `<a href="${esc(x.url)}" target="_blank" rel="noopener" class="btn kedua kecil" style="margin:2px">${ikon('pautan', 14)} Pautan</a>`
+              : `<button class="btn kedua kecil" style="margin:2px" data-fail="${esc(x.fileId)}" title="${esc(x.namaFail)}">${ikon('fail', 14)} ${esc((x.namaFail || 'Fail').slice(0, 22))}</button>`).join('')}</td>
+            <td data-label="Catatan" class="kecil">${esc([...new Set(xs.map((x) => x.catatan).filter(Boolean))].join(' · ') || '—')}</td>
+          </tr>`).join('')}</tbody></table></div>`
+          : `<p class="belum-teks" style="margin:0">Belum ada kerja dihantar.</p>`}
+      </article>`;
+    }).join('')}</div>`;
+    if (fokus) document.getElementById('s-' + fokus)?.scrollIntoView({ block: 'center' });
+  }
+
+  // Buka fail peribadi melalui Apps Script
+  $('isi').onclick = async (e) => {
+    const b = e.target.closest('[data-fail]');
+    if (!b) return;
+    const tetingkap = window.open('', '_blank'); // buka segera (elak penyekat pop-up)
+    const asal = b.innerHTML;
+    b.disabled = true; b.textContent = 'Membuka…';
+    try {
+      const blob = await bukaKerjaMurid(b.dataset.fail, (await tetapanP).appsScriptUrl);
+      const url = URL.createObjectURL(blob);
+      if (tetingkap) tetingkap.location.href = url; else window.open(url, '_blank');
+    } catch (err) {
+      tetingkap?.close();
+      toast(mesejRalat(err), 'ralat');
+    }
+    b.disabled = false; b.innerHTML = asal;
+  };
+
+  $('tarikh').onchange = muat;
+  $('kelas').onchange = muat;
+  $('sebelum').onclick = () => { $('tarikh').value = hariBekerja(tambahHari($('tarikh').value, -1), -1); muat(); };
+  $('selepas').onclick = () => { $('tarikh').value = hariBekerja(tambahHari($('tarikh').value, 1), 1); muat(); };
+  muat();
+</script>
+</body>
+</html>

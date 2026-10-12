@@ -18,8 +18,14 @@
         <a class="btn kedua" href="login.html">Log Masuk Guru</a>
       </div>
     </div>
-    <div class="kad status-hari" id="status">
-      <span class="lembut">Memuatkan status hari ini…</span>
+    <div class="kad status-hari">
+      <div class="nav-hari pilih-tarikh">
+        <button class="btn kedua kecil" id="sebelum" aria-label="Hari sebelum">‹</button>
+        <input type="date" id="tarikh" aria-label="Pilih tarikh">
+        <button class="btn kedua kecil" id="selepas" aria-label="Hari selepas">›</button>
+        <button class="btn kedua kecil" id="kini" hidden>Hari ini</button>
+      </div>
+      <div id="status"><span class="lembut">Memuatkan status…</span></div>
     </div>
   </section>
 
@@ -27,58 +33,86 @@
 </main>
 
 <script type="module">
-  import { pasangRangka, hariIni, hariBekerja, formatTarikh, esc } from './assets/js/ui.js';
+  import { pasangRangka, hariIni, hariBekerja, tambahHari, formatTarikh, esc } from './assets/js/ui.js';
   import { muatJadual, statusPdpr, kelasTerlibat, bahanTarikh } from './assets/js/data.js';
   import { indeksHari, sesiHari } from './assets/js/jadual.js';
 
   pasangRangka('index.html');
 
+  const $ = (id) => document.getElementById(id);
   const kini = hariIni();
-  const sasaran = hariBekerja(kini, 1); // jika hujung minggu → Isnin akan datang
-  const elStatus = document.getElementById('status');
-  const elSenarai = document.getElementById('senarai');
+  const elStatus = $('status'), elSenarai = $('senarai'), elTarikh = $('tarikh');
+  const p = new URLSearchParams(location.search);
+  // Lalai: hari ini (atau hari persekolahan seterusnya jika hujung minggu)
+  elTarikh.value = /^\d{4}-\d{2}-\d{2}$/.test(p.get('t') || '') ? p.get('t') : hariBekerja(kini, 1);
 
-  try {
-    const [jadual, status, bahan] = await Promise.all([muatJadual(sasaran), statusPdpr(sasaran), bahanTarikh(sasaran)]);
-    const label = sasaran === kini ? 'Hari ini' : 'Hari persekolahan seterusnya';
+  const labelHari = (t) => {
+    if (t === kini) return 'Hari ini';
+    if (t === tambahHari(kini, 1)) return 'Esok';
+    if (t === tambahHari(kini, -1)) return 'Semalam';
+    return t > kini ? 'Akan datang' : 'Tarikh lepas';
+  };
 
-    elStatus.innerHTML = `
-      <span class="lembut">${label}</span>
-      <span class="besar">${esc(formatTarikh(sasaran))}</span>
-      <span><i class="titik ${status.aktif ? 'on' : ''}"></i>${
-        status.aktif
-          ? status.kelas === 'semua' ? '<b>PDPR berjalan</b> untuk semua kelas' : `<b>PDPR</b> untuk ${status.kelas.length} kelas`
-          : '<b>Tiada PDPR</b> — sesi persekolahan biasa'
-      }</span>
-      ${status.catatan ? `<small class="lembut">${esc(status.catatan)}</small>` : ''}`;
+  let giliran = 0;
+  async function muat() {
+    const t = elTarikh.value;
+    if (!t) return;
+    history.replaceState(null, '', t === hariBekerja(kini, 1) ? location.pathname : `?t=${t}`);
+    $('kini').hidden = t === hariBekerja(kini, 1);
+    const saya = ++giliran;
+    elStatus.innerHTML = '<span class="lembut">Memuatkan…</span>';
 
-    // Kira bahan per kelas
-    const kiraBahan = {};
-    bahan.forEach((b) => (b.kelasIds || []).forEach((k) => (kiraBahan[k] = (kiraBahan[k] || 0) + 1)));
+    try {
+      const h = indeksHari(t);
+      const [jadual, status, bahan] = await Promise.all([muatJadual(t), statusPdpr(t), h >= 0 ? bahanTarikh(t) : []]);
+      if (saya !== giliran) return;
 
-    const h = indeksHari(sasaran);
-    const susun = (a, b) => a[1].nama.localeCompare(b[1].nama, 'ms', { numeric: true });
-    const semua = Object.entries(jadual.kelas).sort(susun);
-    const kumpulan = [
-      ['Prasekolah', semua.filter(([, k]) => k.jenis === 'pra')],
-      ['Tahun 1 – 6', semua.filter(([, k]) => k.jenis !== 'pra')],
-    ].filter(([, s]) => s.length);
+      elStatus.innerHTML = `
+        <span class="lembut">${labelHari(t)}</span>
+        <span class="besar">${esc(formatTarikh(t))}</span>
+        <span><i class="titik ${status.aktif ? 'on' : ''}"></i>${
+          h < 0 ? '<b>Hujung minggu</b>'
+          : status.aktif
+            ? status.kelas === 'semua' ? '<b>PDPR</b> untuk semua kelas' : `<b>PDPR</b> untuk ${status.kelas.length} kelas`
+            : '<b>Tiada PDPR</b> — sesi persekolahan biasa'
+        }</span>
+        ${status.catatan ? `<small class="lembut">${esc(status.catatan)}</small>` : ''}
+        ${status.aktif && bahan.length ? `<small class="lembut">${bahan.length} bahan telah dimuat naik</small>` : ''}`;
 
-    elSenarai.innerHTML = kumpulan.map(([tajuk, senarai]) => `
-      <div class="seksyen-tajuk"><h2>${tajuk}</h2><span class="lembut">${senarai.length} kelas</span></div>
-      <div class="grid-kelas">${senarai.map(([id, k]) => {
-        const nSesi = h >= 0 ? sesiHari(jadual, h, { kelasId: id }).length : 0;
-        const terlibat = kelasTerlibat(status, id);
-        const n = kiraBahan[id] || 0;
-        return `<a class="kelas-kad" href="kelas.html?k=${k.slug}&t=${sasaran}">
-          <b>${esc(k.nama)}</b>
-          <small>${nSesi} sesi · ${terlibat ? `${n} bahan` : 'tiada PDPR'}</small>
-        </a>`;
-      }).join('')}</div>`).join('');
-  } catch (e) {
-    console.error(e);
-    elSenarai.innerHTML = `<div class="notis amaran">Gagal memuatkan data. Sila cuba muat semula halaman.</div>`;
+      // Kira bahan per kelas
+      const kiraBahan = {};
+      bahan.forEach((b) => (b.kelasIds || []).forEach((k) => (kiraBahan[k] = (kiraBahan[k] || 0) + 1)));
+
+      const susun = (a, b) => a[1].nama.localeCompare(b[1].nama, 'ms', { numeric: true });
+      const semua = Object.entries(jadual.kelas).sort(susun);
+      const kumpulan = [
+        ['Prasekolah', semua.filter(([, k]) => k.jenis === 'pra')],
+        ['Tahun 1 – 6', semua.filter(([, k]) => k.jenis !== 'pra')],
+      ].filter(([, s]) => s.length);
+
+      elSenarai.innerHTML = kumpulan.map(([tajuk, senarai]) => `
+        <div class="seksyen-tajuk"><h2>${tajuk}</h2><span class="lembut">${senarai.length} kelas</span></div>
+        <div class="grid-kelas">${senarai.map(([id, k]) => {
+          const nSesi = h >= 0 ? sesiHari(jadual, h, { kelasId: id }).length : 0;
+          const terlibat = kelasTerlibat(status, id);
+          const n = kiraBahan[id] || 0;
+          const ket = h < 0 ? 'hujung minggu' : `${nSesi} sesi · ${terlibat ? `${n} bahan` : 'tiada PDPR'}`;
+          return `<a class="kelas-kad ${terlibat && n ? 'ada-bahan' : ''}" href="kelas.html?k=${k.slug}&t=${t}">
+            <b>${esc(k.nama)}</b>
+            <small>${ket}</small>
+          </a>`;
+        }).join('')}</div>`).join('');
+    } catch (e) {
+      console.error(e);
+      elSenarai.innerHTML = `<div class="notis amaran">Gagal memuatkan data. Sila cuba muat semula halaman.</div>`;
+    }
   }
+
+  elTarikh.onchange = muat;
+  $('sebelum').onclick = () => { elTarikh.value = hariBekerja(tambahHari(elTarikh.value, -1), -1); muat(); };
+  $('selepas').onclick = () => { elTarikh.value = hariBekerja(tambahHari(elTarikh.value, 1), 1); muat(); };
+  $('kini').onclick = () => { elTarikh.value = hariBekerja(kini, 1); muat(); };
+  muat();
 </script>
 </body>
 </html>

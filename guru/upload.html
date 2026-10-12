@@ -141,7 +141,7 @@
       return `<label ${pdpr ? '' : 'style="opacity:.55"'}>
         <input type="checkbox" value="${s.id}" ${keadaan.dipilih.has(s.id) ? 'checked' : ''} ${pdpr ? '' : 'disabled'}>
         <span class="t"><b>${esc(jd.kelas[s.kelas]?.nama)} · ${esc(jd.subjek[s.subjek]?.nama)}</b>
-          <small>${s.mula}–${s.tamat} · ${labelWaktu(s.waktu)}${s.kumpulan.length ? ' · ' + esc(s.kumpulan.join(' & ')) : ''}</small></span>
+          <small>${s.harian ? 'Aktiviti harian prasekolah' : `${s.mula}–${s.tamat} · ${labelWaktu(s.waktu)}`}${s.kumpulan.length ? ' · ' + esc(s.kumpulan.join(' & ')) : ''}</small></span>
         ${!pdpr ? '<span class="lencana tiada">Bukan PDPR</span>' : n ? `<span class="lencana">✓ ${n}</span>` : '<span class="lencana amaran">Belum</span>'}
       </label>`;
     }).join('') : `<div class="kosong"><p>Tiada kelas pada hari ini.</p></div>`;
@@ -228,7 +228,7 @@
     const asas = {
       tarikh: keadaan.tarikh,
       sesi: sesiPilih.map((s) => s.id),
-      label: sesiPilih.map((s) => `${jd.kelas[s.kelas]?.nama} · ${jd.subjek[s.subjek]?.ringkas} (${labelWaktu(s.waktu).replace('Waktu ', 'W')})`),
+      label: sesiPilih.map((s) => `${jd.kelas[s.kelas]?.nama} · ${jd.subjek[s.subjek]?.ringkas} (${s.harian ? 'Harian' : labelWaktu(s.waktu).replace('Waktu ', 'W')})`),
       kelasIds: uniq(sesiPilih.map((s) => s.kelas)),
       subjekIds: uniq(sesiPilih.map((s) => s.subjek)),
       guruIds: uniq(sesiPilih.flatMap((s) => s.guru)),

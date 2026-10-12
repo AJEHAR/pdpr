@@ -20,6 +20,7 @@ export async function penggunaSemasa() {
   if (fb.auth.authStateReady) await fb.auth.authStateReady();
   else await new Promise((ok) => { const henti = fb.au.onAuthStateChanged(fb.auth, () => { henti(); ok(); }); });
   const u = fb.auth.currentUser;
+  if (u?.isAnonymous) return null; // sesi tanpa nama (ibu bapa) bukan akaun guru
   return u ? { uid: u.uid, email: (u.email || '').toLowerCase(), nama: u.displayName || '', foto: u.photoURL || '' } : null;
 }
 
@@ -49,6 +50,18 @@ export async function logKeluar() {
   else { const fb = await firebase(); await fb.au.signOut(fb.auth); }
   sessionStorage.removeItem('pdpr-profil');
   location.href = akar + 'index.html';
+}
+
+/**
+ * Token untuk ibu bapa/murid (tanpa akaun). Jika guru sudah log masuk dalam browser ini,
+ * sesi guru digunakan; jika tidak, log masuk tanpa nama (Firebase Anonymous Auth).
+ */
+export async function tokenTanpaNama() {
+  if (MOD_DEMO) return { uid: 'demo-murid', token: 'demo' };
+  const fb = await firebase();
+  if (fb.auth.authStateReady) await fb.auth.authStateReady();
+  if (!fb.auth.currentUser) await fb.au.signInAnonymously(fb.auth);
+  return { uid: fb.auth.currentUser.uid, token: await fb.auth.currentUser.getIdToken() };
 }
 
 /** Token ID untuk Apps Script */

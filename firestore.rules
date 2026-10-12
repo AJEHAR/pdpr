@@ -35,6 +35,22 @@ service cloud.firestore {
       allow update, delete: if lulus() && (resource.data.uid == request.auth.uid || admin());
     }
 
+    // ---------- Kerja murid (ibu bapa/murid tanpa akaun; log masuk tanpa nama) ----------
+    // Hanya guru/admin yang diluluskan boleh MEMBACA (privasi murid).
+    match /hantaran/{id} {
+      allow read: if lulus();
+      allow create: if masuk()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.namaMurid is string
+        && request.resource.data.namaMurid.size() >= 2
+        && request.resource.data.namaMurid.size() <= 80
+        && request.resource.data.tarikh is string
+        && request.resource.data.tarikh.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.sesi is string
+        && request.resource.data.jenis in ['fail', 'pautan'];
+      allow delete: if admin();
+    }
+
     // ---------- Daftar awal oleh admin (ID dokumen = emel huruf kecil) ----------
     match /jemputan/{e} {
       allow read: if admin() || (masuk() && emel() == e);

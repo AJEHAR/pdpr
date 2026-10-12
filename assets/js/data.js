@@ -177,18 +177,60 @@ export async function muatVersiJadual(id) {
   return j;
 }
 
-/** Jadual yang berkuat kuasa pada tarikh (lalai: hari ini) */
-export async function muatJadual(tarikh = tarikhKini()) {
+// ------------------------------------------------------------
+//  Prasekolah — mod harian (disimpan dalam tetapan/pra)
+//    { kelas: { [kelasId]: { harian: true, guru: [guruId] } },
+//      guru:  { ['pra-xxx']: { nama, ringkas } } }   ← guru yang tiada dalam aSc
+// ------------------------------------------------------------
+const KUNCI_PRA = 'pdpr-pra';
+
+export async function muatPra(segar = false) {
+  if (!segar) {
+    try {
+      const c = JSON.parse(sessionStorage.getItem(KUNCI_PRA) || 'null');
+      if (c && Date.now() - c.t < TEMPOH_INDEKS) return c.d;
+    } catch {}
+  }
+  let d = null;
+  try { d = await ambil('tetapan', 'pra'); } catch (e) { console.warn('Gagal baca tetapan prasekolah', e); }
+  const hasil = { kelas: d?.kelas || {}, guru: d?.guru || {} };
+  try { sessionStorage.setItem(KUNCI_PRA, JSON.stringify({ t: Date.now(), d: hasil })); } catch {}
+  return hasil;
+}
+
+export async function simpanPra(data) {
+  await tulis('tetapan', 'pra', { kelas: data.kelas || {}, guru: data.guru || {} });
+  try { sessionStorage.removeItem(KUNCI_PRA); } catch {}
+}
+
+/** Gabungkan guru tambahan & kelas mod harian ke dalam jadual (salinan, cache tidak diubah) */
+function tambahPra(j, pra) {
+  const kelas = {};
+  for (const [id, k] of Object.entries(pra.kelas || {})) if (k.harian && j.kelas[id]) kelas[id] = k;
+  return {
+    ...j,
+    guru: { ...j.guru, ...pra.guru },
+    subjek: { ...j.subjek, harian: { nama: 'Aktiviti Harian', ringkas: 'HARIAN' } },
+    pra: kelas,
+  };
+}
+
+/**
+ * Jadual yang berkuat kuasa pada tarikh (lalai: hari ini), termasuk sesi harian prasekolah.
+ * { mentah: true } → jadual aSc asal sahaja (untuk import/bandingan).
+ */
+export async function muatJadual(tarikh = tarikhKini(), { mentah = false } = {}) {
   const v = pilihVersi(await indeksJadual(), tarikh);
-  return muatVersiJadual(v ? v.id : 'fail-asal');
+  const j = await muatVersiJadual(v ? v.id : 'fail-asal');
+  return mentah ? j : tambahPra(j, await muatPra());
 }
 
 /** { tarikh: jadual } bagi beberapa tarikh (versi sama dimuat sekali sahaja) */
 export async function muatJadualUntuk(senaraiTarikh) {
-  const ind = await indeksJadual();
+  const [ind, pra] = await Promise.all([indeksJadual(), muatPra()]);
   const ids = Object.fromEntries(senaraiTarikh.map((t) => [t, pilihVersi(ind, t)?.id || 'fail-asal']));
   const unik = [...new Set(Object.values(ids))];
-  const dimuat = Object.fromEntries(await Promise.all(unik.map(async (id) => [id, await muatVersiJadual(id)])));
+  const dimuat = Object.fromEntries(await Promise.all(unik.map(async (id) => [id, tambahPra(await muatVersiJadual(id), pra)])));
   return Object.fromEntries(senaraiTarikh.map((t) => [t, dimuat[ids[t]]]));
 }
 
@@ -284,4 +326,23 @@ export function petaSiap(bahan) {
   const p = {};
   for (const b of bahan) for (const s of b.sesi || []) (p[b.tarikh] ??= new Set()).add(s);
   return p;
+}
+
+// ------------------------------------------------------------
+//  Kerja murid (hantaran) — hanya guru/admin yang diluluskan boleh membaca
+//    hantaran/{id} { tarikh, sesi, kelasId, subjekId, guruIds[], namaMurid,
+//                    jenis:'fail'|'pautan', url?, fileId?, namaFail?, catatan, uid, masa }
+// ------------------------------------------------------------
+export const tambahHantaran = (data) => tambah('hantaran', { ...data, masa: new Date().toISOString() });
+
+export async function hantaranJulat(dari, hingga) {
+  return (await senarai('hantaran', [['tarikh', '>=', dari], ['tarikh', '<=', hingga]]))
+    .sort((a, b) => (a.masa || '').localeCompare(b.masa || ''));
+}
+
+/** Bilangan murid unik yang menghantar bagi setiap tarikh+sesi → { 'tarikh|sesi': n } */
+export function kiraHantaran(senaraiHantaran) {
+  const m = {};
+  for (const h of senaraiHantaran) (m[h.tarikh + '|' + h.sesi] ??= new Set()).add((h.namaMurid || '').trim().toUpperCase());
+  return Object.fromEntries(Object.entries(m).map(([k, v]) => [k, v.size]));
 }

@@ -27,7 +27,7 @@
 <script type="module">
   import { kawal } from '../assets/js/auth.js';
   import { pasangApp, esc, ikon, namaCantik, hariIni, hariBekerja, tambahHari, formatTarikh } from '../assets/js/ui.js';
-  import { muatJadual, statusPdpr, kelasTerlibat, bahanTarikh, petaSiap, senarai } from '../assets/js/data.js';
+  import { muatJadual, statusPdpr, kelasTerlibat, bahanTarikh, petaSiap, senarai, hantaranJulat } from '../assets/js/data.js';
   import { sesiHari, indeksHari, labelWaktu } from '../assets/js/jadual.js';
 
   const sesiAuth = await kawal('admin');
@@ -56,7 +56,7 @@
     const h = indeksHari(t);
     if (h < 0) { $('statistik').innerHTML = ''; $('isi').innerHTML = `<div class="kosong"><div class="ikon">🌤️</div><p>Hujung minggu.</p></div>`; return; }
 
-    const [status, bahan, jd] = await Promise.all([statusPdpr(t), bahanTarikh(t), muatJadual(t)]);
+    const [status, bahan, jd, hantaran] = await Promise.all([statusPdpr(t), bahanTarikh(t), muatJadual(t), hantaranJulat(t, t).catch(() => [])]);
     jadual = jd;
     if (!status.aktif) {
       $('statistik').innerHTML = '';
@@ -74,7 +74,8 @@
       <div class="stat"><small>Sudah diisi</small><b>${diisi}</b><div class="bar-maju"><i style="width:${pc}%"></i></div></div>
       <div class="stat"><small>Belum diisi</small><b style="color:${sesi.length - diisi ? '#a8650c' : 'inherit'}">${sesi.length - diisi}</b></div>
       <div class="stat"><small>Pematuhan</small><b>${pc}%</b></div>
-      <div class="stat"><small>Bahan dimuat naik</small><b>${bahan.length}</b>${bagiPihak ? `<small>${bagiPihak} oleh guru ganti</small>` : ''}</div>`;
+      <div class="stat"><small>Bahan dimuat naik</small><b>${bahan.length}</b>${bagiPihak ? `<small>${bagiPihak} oleh guru ganti</small>` : ''}</div>
+      <div class="stat"><small>Murid hantar kerja</small><b>${new Set(hantaran.map((x) => x.kelasId + '|' + (x.namaMurid || '').trim().toUpperCase())).size}</b><small><a href="../guru/kerja.html?t=${t}">Lihat kerja murid →</a></small></div>`;
 
     // Ikut guru (sesi dikongsi dikira untuk setiap guru)
     const ikutGuru = {};

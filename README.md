@@ -13,7 +13,8 @@ dan untuk murid/ibu bapa melihat bahan mengikut kelas dan tarikh. Ada susun atur
 | 1 | Penukar jadual aSc, enjin gabung sesi, laman utama, halaman awam kelas | ✅ |
 | 2 | Log masuk Google, pilih nama, Jadual Saya, Upload (fail/kamera/pautan, gabung sesi, guru ganti), Rekod Saya, Admin: papan pemuka, kalendar PDPR, pengguna, tetapan; Apps Script | ✅ |
 | 3a | Import jadual XML di laman (versi bertarikh, ID stabil) | ✅ |
-| 3b | Jadual prasekolah (mod harian), laporan julat tarikh | ⏳ |
+| 3b | Prasekolah mod harian | ✅ |
+| 3c | Laporan julat tarikh | ⏳ |
 
 ## Halaman
 
@@ -24,10 +25,12 @@ dan untuk murid/ibu bapa melihat bahan mengikut kelas dan tarikh. Ada susun atur
 | `login.html` → `daftar.html` | Guru | Log masuk Google; pilih nama (kali pertama sahaja) |
 | `guru/index.html` | Guru | Jadual Saya: grid mingguan (desktop) / tab hari (mobile) dengan status ✅/⭕ |
 | `guru/upload.html` | Guru | Pilih sesi (boleh gabung), fail/gambar kamera/pautan, catatan, guru ganti |
+| `guru/kerja.html` | Guru | Kerja murid yang dihantar bagi setiap sesi (fail dibuka secara peribadi) |
 | `guru/rekod.html` | Guru | Semua upload saya, padam |
 | `admin/index.html` | Admin | Pematuhan harian ikut guru/kelas, CSV |
 | `admin/kalendar.html` | Admin | Tanda hari PDPR (semua / kelas tertentu, julat tarikh) |
 | `admin/jadual.html` | Admin | Import XML aSc baharu, pratonton perubahan, versi bertarikh |
+| `admin/prasekolah.html` | Admin | Mod harian prasekolah: guru setiap kelas pra, guru tambahan (tiada dalam aSc) |
 | `admin/pengguna.html` | Admin | Luluskan Gmail, daftar awal emel (satu/pukal), lantik admin, pautkan semula nama |
 | `admin/tetapan.html` | Admin | Nama sekolah, logo, URL Apps Script, had saiz fail |
 
@@ -128,3 +131,25 @@ data/jadual.json       jadual semasa (tukar dengan tools/tukar-jadual.mjs)
   guru kekal terpaut walaupun aSc menjana ID baharu.
 - Guru yang tiada dalam jadual baharu disenaraikan dalam pratonton; pautkan semula di **Admin → Pengguna** jika perlu.
 - Import pertama turut menyimpan jadual asal (`data/jadual.json`) sebagai versi "Asal" secara automatik.
+
+## Prasekolah (mod harian)
+
+**Admin → Prasekolah**: hidupkan *Mod harian* untuk kelas PRA, dan tandakan guru yang memuat naik.
+Setiap kelas mendapat satu sesi **"Aktiviti Harian"** setiap hari PDPR, iaitu 1 upload sehari.
+Guru prasekolah yang tiada dalam aSc ditambah sebagai **guru tambahan**, dan boleh memilih nama sendiri semasa log masuk.
+Slot aSc kelas pra (cth Pendidikan Islam waktu 7) kekal seperti biasa.
+
+## Kerja murid
+
+Di halaman kelas, setiap sesi PDPR ada butang **📤 Hantar kerja**. Ibu bapa/murid menulis nama,
+kemudian mengambil gambar, memilih fail atau menampal pautan video. Tiada akaun diperlukan
+(Firebase **Anonymous Auth** digunakan di belakang tabir).
+
+- Fail disimpan **tertutup** di `PDPR / Kerja Murid / KELAS / bulan / tarikh /` (tidak dikongsi awam).
+- Guru melihat kerja di **Guru → Kerja Murid**; fail dibuka melalui Apps Script.
+- Jadual Saya menunjukkan "📥 n murid", dan Papan Pemuka menunjukkan bilangan murid yang menghantar.
+
+**Persediaan (sekali):**
+1. Firebase → Authentication → Sign-in method → **Anonymous** → Enable.
+2. Firestore → Rules → tampal `firestore.rules` terkini → Publish.
+3. Apps Script → tampal `apps-script/Code.gs` terkini → **Deploy → Manage deployments → ✏️ → Version: New version → Deploy**.

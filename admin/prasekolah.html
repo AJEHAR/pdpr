@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prasekolah · Portal PDPR</title>
+  <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main>
+  <div class="kepala">
+    <div>
+      <h1>Prasekolah</h1>
+      <p class="lembut">Mod harian: guru prasekolah memuat naik <b>sekali sehari bagi setiap kelas</b> (cth lembaran aktiviti hari itu), tanpa jadual waktu.</p>
+    </div>
+  </div>
+
+  <div class="upload-grid">
+    <section>
+      <div class="langkah"><span class="no">1</span><h2>Kelas prasekolah</h2></div>
+      <div id="kelas"><p class="memuat">Memuatkan…</p></div>
+    </section>
+
+    <section>
+      <div class="kad">
+        <div class="langkah"><span class="no">2</span><h2>Guru tambahan</h2></div>
+        <p class="bantuan" style="margin-top:0">Untuk guru (cth guru prasekolah) yang <b>tiada dalam jadual aSc</b>. Selepas ditambah, mereka boleh memilih nama sendiri semasa log masuk, atau anda boleh mendaftarkan emel mereka di <a href="pengguna.html?tab=jemputan">Pengguna → Daftar Awal</a>.</p>
+        <form id="f-guru" class="baris-medan" style="align-items:end">
+          <div class="medan" style="margin:0"><label for="g-nama">Nama penuh</label><input type="text" id="g-nama" required placeholder="cth SITI AMINAH BINTI ALI"></div>
+          <div class="medan" style="margin:0"><label for="g-kod">Kod ringkas</label><input type="text" id="g-kod" required maxlength="6" placeholder="cth AMI"></div>
+          <button class="btn">Tambah</button>
+        </form>
+        <div id="senarai-guru" style="margin-top:14px"></div>
+      </div>
+      <div class="melekit-bawah"><button class="btn penuh" id="simpan">Simpan tetapan prasekolah</button></div>
+    </section>
+  </div>
+</main>
+
+<script type="module">
+  import { kawal } from '../assets/js/auth.js';
+  import { pasangApp, esc, namaCantik, toast, mesejRalat } from '../assets/js/ui.js';
+  import { muatJadual, muatPra, simpanPra, MOD_DEMO } from '../assets/js/data.js';
+
+  const sesiAuth = await kawal('admin');
+  await pasangApp('admin/prasekolah.html', sesiAuth);
+
+  const $ = (id) => document.getElementById(id);
+  const [jadual, pra0] = await Promise.all([muatJadual(undefined, { mentah: true }), muatPra(true)]);
+  const pra = { kelas: structuredClone(pra0.kelas), guru: structuredClone(pra0.guru) };
+
+  const kelasPra = Object.entries(jadual.kelas).filter(([, k]) => k.jenis === 'pra')
+    .sort((a, b) => a[1].nama.localeCompare(b[1].nama, 'ms'));
+  const semuaGuru = () => Object.entries({ ...jadual.guru, ...pra.guru })
+    .sort((a, b) => (a[0].startsWith('pra-') ? -1 : 0) - (b[0].startsWith('pra-') ? -1 : 0) || a[1].nama.localeCompare(b[1].nama, 'ms'));
+
+  function lukisKelas() {
+    if (!kelasPra.length) {
+      $('kelas').innerHTML = `<div class="kad"><p>Tiada kelas prasekolah dalam jadual. Kelas yang namanya bermula dengan "PRA" dikesan secara automatik.</p></div>`;
+      return;
+    }
+    $('kelas').innerHTML = kelasPra.map(([id, k]) => {
+      const t = pra.kelas[id] || { harian: false, guru: [] };
+      return `<div class="kad" data-kelas="${id}">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <h3 style="margin:0">${esc(k.nama)}</h3>
+          <label class="suis"><input type="checkbox" data-harian ${t.harian ? 'checked' : ''}> Mod harian</label>
+        </div>
+        <div data-pilihan ${t.harian ? '' : 'hidden'}>
+          <label style="margin-top:12px">Guru yang memuat naik</label>
+          <input type="search" data-cari placeholder="Cari nama guru…" style="margin-bottom:6px">
+          <div class="senarai-semak" style="grid-template-columns:1fr">${semuaGuru().map(([gid, g]) => `
+            <label data-nama="${esc(g.nama.toLowerCase())} ${esc((g.ringkas || '').toLowerCase())}">
+              <input type="checkbox" value="${gid}" ${(t.guru || []).includes(gid) ? 'checked' : ''}>
+              ${esc(namaCantik(g.nama))} <span class="lembut kecil">(${esc(g.ringkas)})</span>${gid.startsWith('pra-') ? ' <span class="lencana">Tambahan</span>' : ''}
+            </label>`).join('')}
+          </div>
+          <p class="bantuan"><b data-kira>${(t.guru || []).length}</b> guru dipilih. Slot aSc kelas ini (cth Pendidikan Islam) kekal seperti biasa.</p>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function lukisGuru() {
+    const g = Object.entries(pra.guru);
+    $('senarai-guru').innerHTML = g.length ? `<div class="senarai-fail">${g.map(([id, x]) => `
+      <div class="fail-item"><span class="n">${esc(namaCantik(x.nama))}</span><span class="s">${esc(x.ringkas)}</span>
+        <button class="ik-btn" data-buang="${id}" title="Buang">✕</button></div>`).join('')}</div>`
+      : `<p class="lembut kecil">Belum ada guru tambahan.</p>`;
+  }
+
+  // Kumpul pilihan dari borang ke objek pra
+  function kumpul() {
+    document.querySelectorAll('[data-kelas]').forEach((el) => {
+      const id = el.dataset.kelas;
+      pra.kelas[id] = {
+        harian: el.querySelector('[data-harian]').checked,
+        guru: [...el.querySelectorAll('.senarai-semak input:checked')].map((i) => i.value),
+      };
+    });
+  }
+
+  $('kelas').addEventListener('change', (e) => {
+    if (e.target.matches('[data-harian]')) e.target.closest('[data-kelas]').querySelector('[data-pilihan]').hidden = !e.target.checked;
+    const kad = e.target.closest('[data-kelas]');
+    if (kad) kad.querySelector('[data-kira]').textContent = kad.querySelectorAll('.senarai-semak input:checked').length;
+  });
+  $('kelas').addEventListener('input', (e) => {
+    if (!e.target.matches('[data-cari]')) return;
+    const q = e.target.value.trim().toLowerCase();
+    e.target.closest('[data-kelas]').querySelectorAll('.senarai-semak label').forEach((l) => (l.hidden = q && !l.dataset.nama.includes(q)));
+  });
+
+  $('f-guru').onsubmit = (e) => {
+    e.preventDefault();
+    kumpul();
+    const nama = $('g-nama').value.trim().toUpperCase().replace(/\s+/g, ' ');
+    const ringkas = $('g-kod').value.trim().toUpperCase();
+    const semua = { ...jadual.guru, ...pra.guru };
+    if (Object.values(semua).some((g) => g.ringkas?.toUpperCase() === ringkas)) return toast('Kod ringkas sudah digunakan', 'ralat');
+    pra.guru['pra-' + Date.now().toString(36)] = { nama, ringkas };
+    $('g-nama').value = ''; $('g-kod').value = '';
+    lukisGuru(); lukisKelas();
+    toast('Ditambah. Tandakan guru ini pada kelasnya, kemudian Simpan.');
+  };
+
+  $('senarai-guru').onclick = (e) => {
+    const b = e.target.closest('[data-buang]');
+    if (!b) return;
+    if (!confirm('Buang guru tambahan ini? Akaun yang sudah dipautkan kepada nama ini perlu dipautkan semula.')) return;
+    kumpul();
+    delete pra.guru[b.dataset.buang];
+    for (const k of Object.values(pra.kelas)) k.guru = (k.guru || []).filter((g) => g !== b.dataset.buang);
+    lukisGuru(); lukisKelas();
+  };
+
+  $('simpan').onclick = async () => {
+    kumpul();
+    const tanpaGuru = Object.entries(pra.kelas).filter(([, k]) => k.harian && !k.guru.length);
+    if (tanpaGuru.length) return toast(`Pilih sekurang-kurangnya seorang guru untuk ${jadual.kelas[tanpaGuru[0][0]]?.nama}`, 'ralat');
+    $('simpan').disabled = true;
+    try {
+      await simpanPra(pra);
+      toast(MOD_DEMO ? 'Disimpan (mod demo)' : 'Tetapan prasekolah disimpan');
+    } catch (err) { toast(mesejRalat(err), 'ralat'); }
+    $('simpan').disabled = false;
+  };
+
+  lukisKelas();
+  lukisGuru();
+</script>
+</body>
+</html>

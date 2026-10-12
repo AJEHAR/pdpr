@@ -2,7 +2,7 @@
 //  upload.js — Hantar fail ke Google Drive melalui Apps Script
 // ============================================================
 import { MOD_DEMO } from './firebase.js';
-import { tokenId } from './auth.js';
+import { tokenId, tokenTanpaNama } from './auth.js';
 
 /** Kecilkan gambar besar (foto telefon) supaya cepat dimuat naik. Fail lain dipulangkan asal. */
 export async function kecilkanGambar(fail, sisiMaks = 1800, kualiti = 0.82) {
@@ -78,4 +78,45 @@ export async function buangFail(fileId, url) {
 export async function ujiAppsScript(url) {
   const r = await fetch(url);
   return r.json();
+}
+
+/**
+ * Hantar kerja murid (ibu bapa/murid, tanpa akaun). Fail disimpan TERTUTUP di Drive.
+ * @param {{tarikh, kelas, namaMurid, awalan}} meta
+ */
+export async function hantarKerjaMurid(fail, meta, url) {
+  if (MOD_DEMO) {
+    await new Promise((r) => setTimeout(r, 500));
+    return { id: 'demo-' + Date.now(), nama: fail.name };
+  }
+  if (!url) throw new Error('Sistem muat naik belum disediakan oleh sekolah.');
+  const { token } = await tokenTanpaNama();
+  const badan = {
+    aksi: 'murid',
+    token,
+    nama: (meta.awalan ? meta.awalan + '_' : '') + fail.name,
+    mime: fail.type || 'application/octet-stream',
+    data: await keBase64(fail),
+    tarikh: meta.tarikh,
+    kelas: meta.kelas,
+    namaMurid: meta.namaMurid,
+  };
+  const r = await fetch(url, { method: 'POST', body: JSON.stringify(badan), headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.ralat || 'Gagal menghantar');
+  return { id: j.id, nama: fail.name };
+}
+
+/** Guru membuka fail kerja murid (peribadi) → Blob */
+export async function bukaKerjaMurid(fileId, url) {
+  if (MOD_DEMO) return new Blob(['Mod demo: fail kerja murid tidak disimpan.'], { type: 'text/plain' });
+  const r = await fetch(url, {
+    method: 'POST',
+    body: JSON.stringify({ aksi: 'lihat', token: await tokenId(), id: fileId }),
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+  });
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.ralat || 'Gagal membuka fail');
+  const bait = Uint8Array.from(atob(j.data), (c) => c.charCodeAt(0));
+  return new Blob([bait], { type: j.mime || 'application/octet-stream' });
 }

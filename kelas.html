@@ -32,7 +32,8 @@
 
 <script type="module">
   import { pasangRangka, hariIni, hariBekerja, tambahHari, formatTarikh, esc, namaCantik } from './assets/js/ui.js';
-  import { muatJadual, statusPdpr, kelasTerlibat, bahanKelas } from './assets/js/data.js';
+  import { muatJadual, statusPdpr, kelasTerlibat, bahanKelas, muatTetapan } from './assets/js/data.js';
+  import { bukaBorangKerja, hantaranPeranti } from './assets/js/hantar-kerja.js';
   import { indeksHari, sesiHari, labelWaktu } from './assets/js/jadual.js';
 
   pasangRangka('kelas.html');
@@ -68,6 +69,7 @@
   else { try { elKelas.value = localStorage.getItem('pdpr-kelas') || ''; } catch {} }
   elTarikh.value = /^\d{4}-\d{2}-\d{2}$/.test(p.get('t') || '') ? p.get('t') : hariBekerja(hariIni(), 1);
 
+  const tetapanP = muatTetapan(); // URL Apps Script & had saiz untuk hantar kerja
   let giliran = 0; // elak hasil lama menimpa hasil baharu
   async function papar() {
     const kelasId = elKelas.value, tarikh = elTarikh.value;
@@ -119,7 +121,7 @@
       let lepasRehat = false;
       html += `<div class="senarai-sesi">` + sesi.map((s) => {
         let pemisah = '';
-        if (!lepasRehat && s.mula >= '10:30') { lepasRehat = true; pemisah = `<div class="rehat">— REHAT —</div>`; }
+        if (!lepasRehat && !s.harian && s.mula >= '10:30') { lepasRehat = true; pemisah = `<div class="rehat">— REHAT —</div>`; }
         const sub = jd.subjek[s.subjek] || { nama: '?' };
         const guru = s.guru.map((g) => namaCantik(jd.guru[g]?.nama || '?')).join(', ');
         const b = bahanSesi(s.id);
@@ -130,6 +132,10 @@
               <h3>${esc(sub.nama)}</h3>
               <div class="meta">${esc(guru)}${s.kumpulan.length ? ` · ${esc(s.kumpulan.join(' & '))}` : ''}</div>
               ${terlibat ? (b.length ? `<div class="bahan">${b.map(kadBahan).join('')}</div>` : `<span class="belum-teks">Bahan belum dimuat naik</span>`) : ''}
+              ${terlibat ? `<div class="hantar-baris">
+                <button class="btn kecil" data-hantar="${esc(s.id)}">📤 Hantar kerja</button>
+                ${hantaranPeranti(tarikh, s.id).map((x) => `<span class="lencana">✓ ${esc(x.nama)}${x.n > 1 ? ` (${x.n})` : ''}</span>`).join('')}
+              </div>` : ''}
             </div>
           </article>`;
       }).join('') + `</div>`;
@@ -139,6 +145,10 @@
       <button class="btn kedua" id="kongsi">🔗 Salin pautan kelas</button>
       <button class="btn kedua" onclick="print()">🖨️ Cetak</button></div>`;
     elHasil.innerHTML = html;
+    elHasil.querySelectorAll('[data-hantar]').forEach((b) => (b.onclick = async () => {
+      const s = sesi.find((x) => x.id === b.dataset.hantar);
+      bukaBorangKerja({ tarikh, sesi: s, kelasId, jd, tetapan: await tetapanP, onSiap: papar });
+    }));
     $('kongsi').onclick = async (e) => {
       const url = location.href;
       try {

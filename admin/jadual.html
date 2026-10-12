@@ -133,7 +133,7 @@
       ? `<div class="notis amaran">Tarikh mulai sudah lepas. Papan pemuka dan laporan bagi tarikh ${esc(formatTarikh(mulai, 'pendek'))} dan seterusnya akan dikira dengan jadual baharu.</div>` : '';
     if (!baru || !mulai) return;
 
-    const lama = await muatJadual(mulai);
+    const lama = await muatJadual(mulai, { mentah: true });
     hasil = stabilkanId(baru, lama);
     const L = hasil.laporan;
 

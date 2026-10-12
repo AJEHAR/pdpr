@@ -26,6 +26,8 @@ export const formatTarikh = (t, gaya = 'panjang') =>
 
 // ---------- Ikon (garis, 24px) ----------
 const P = {
+  blok: '<rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M12 3l4.5 7.5h-9z"/>',
+  murid: '<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/><path d="M12 4v3"/>',
   grid: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
   rumah: '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
   kalendar: '<rect x="3" y="4.5" width="18" height="16.5" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/>',
@@ -106,14 +108,19 @@ export async function pasangApp(aktif, { u, profil }) {
     ? [
         { href: 'guru/index.html', label: 'Jadual Saya', pendek: 'Jadual', ikon: 'kalendar' },
         { href: 'guru/upload.html', label: 'Upload Bahan', pendek: 'Upload', ikon: 'upload' },
+        { href: 'guru/kerja.html', label: 'Kerja Murid', pendek: 'Murid', ikon: 'murid' },
         { href: 'guru/rekod.html', label: 'Rekod Saya', pendek: 'Rekod', ikon: 'senarai' },
       ]
-    : [{ href: 'guru/upload.html', label: 'Upload (Guru Ganti)', pendek: 'Upload', ikon: 'upload' }];
+    : [
+        { href: 'guru/kerja.html', label: 'Kerja Murid', pendek: 'Murid', ikon: 'murid' },
+        { href: 'guru/upload.html', label: 'Upload (Guru Ganti)', pendek: 'Upload', ikon: 'upload' },
+      ];
   const admin = adalahAdmin(profil)
     ? [
         { href: 'admin/index.html', label: 'Papan Pemuka', pendek: 'Papan', ikon: 'carta' },
         { href: 'admin/kalendar.html', label: 'Kalendar PDPR', pendek: 'Kalendar', ikon: 'kalendar' },
         { href: 'admin/jadual.html', label: 'Jadual Waktu', pendek: 'Jadual', ikon: 'grid' },
+        { href: 'admin/prasekolah.html', label: 'Prasekolah', pendek: 'Pra', ikon: 'blok' },
         { href: 'admin/pengguna.html', label: 'Pengguna', pendek: 'Pengguna', ikon: 'pengguna' },
         { href: 'admin/tetapan.html', label: 'Tetapan', pendek: 'Tetapan', ikon: 'tetapan' },
       ]

@@ -41,19 +41,53 @@ function folderInduk() {
   return f;
 }
 
-/** POST — { aksi: 'simpan' | 'padam', token, ... } */
+/** POST — { aksi: 'simpan' | 'padam' | 'murid' | 'lihat', token, ... } */
 function doPost(e) {
   try {
     const req = JSON.parse(e.postData.contents);
     const pengguna = sahkanToken(req.token);
+
+    // Kerja murid: ibu bapa/murid (log masuk tanpa nama) — tiada semakan profil
+    if (req.aksi === 'murid') return jawab(simpanMurid(req, pengguna));
+
     const profil = bacaProfil(req.token, pengguna.uid);
     if (!profil || profil.status !== 'lulus') throw new Error('Akaun belum diluluskan admin.');
 
     if (req.aksi === 'padam') return jawab(padam(req, pengguna, profil));
+    if (req.aksi === 'lihat') return jawab(lihat(req));
     return jawab(simpan(req, pengguna));
   } catch (err) {
     return jawab({ ok: false, ralat: String((err && err.message) || err) });
   }
+}
+
+/**
+ * Simpan kerja murid secara TERTUTUP (tidak dikongsi awam).
+ * Struktur: PDPR / Kerja Murid / 4 RAUB / 2026-10 / 2026-10-13 / BI_NAMA-MURID_gambar.jpg
+ */
+function simpanMurid(req, pengguna) {
+  const bait = Utilities.base64Decode(req.data || '');
+  if (!bait.length) throw new Error('Fail kosong.');
+  if (bait.length > HAD_MB * 1024 * 1024) throw new Error('Fail melebihi ' + HAD_MB + ' MB.');
+  const nama = String(req.namaMurid || '').trim();
+  if (nama.length < 2) throw new Error('Sila tulis nama murid.');
+  const tarikh = /^\d{4}-\d{2}-\d{2}$/.test(req.tarikh) ? req.tarikh : Utilities.formatDate(new Date(), 'Asia/Kuala_Lumpur', 'yyyy-MM-dd');
+
+  const folder = dapatFolder(['Kerja Murid', namaSelamat(req.kelas || 'LAIN-LAIN'), tarikh.slice(0, 7), tarikh]);
+  const blob = Utilities.newBlob(bait, req.mime || 'application/octet-stream', namaSelamat(req.nama || 'kerja'));
+  const fail = folder.createFile(blob);
+  fail.setDescription(JSON.stringify({ jenis: 'murid', uid: pengguna.uid, namaMurid: nama, masa: new Date().toISOString() }));
+  return { ok: true, id: fail.getId() };
+}
+
+/** Guru/admin melihat fail kerja murid (fail peribadi dihantar melalui skrip ini) */
+function lihat(req) {
+  const fail = DriveApp.getFileById(req.id);
+  let meta = {};
+  try { meta = JSON.parse(fail.getDescription() || '{}'); } catch (e) {}
+  if (meta.jenis !== 'murid') throw new Error('Fail ini bukan kerja murid.');
+  const blob = fail.getBlob();
+  return { ok: true, nama: fail.getName(), mime: blob.getContentType(), data: Utilities.base64Encode(blob.getBytes()) };
 }
 
 /** Sahkan Firebase ID token melalui Identity Toolkit */

@@ -141,9 +141,16 @@ export function sesiHari(jadual, h, tapis = {}) {
     }
   }
 
-  return sesi
-    .map(({ _k, ...x }) => ({ id: `${x.kelas}_${x.subjek}_${h}_${x.waktu[0]}`, ...x }))
-    .sort((a, b) => a.waktu[0] - b.waktu[0] || a.kelas.localeCompare(b.kelas));
+  const hasil = sesi.map(({ _k, ...x }) => ({ id: `${x.kelas}_${x.subjek}_${h}_${x.waktu[0]}`, ...x }));
+
+  // Prasekolah mod harian: satu sesi "Aktiviti Harian" setiap kelas setiap hari
+  for (const [kid, k] of Object.entries(jadual.pra || {})) {
+    if (tapis.kelasId && kid !== tapis.kelasId) continue;
+    if (tapis.guruId && !(k.guru || []).includes(tapis.guruId)) continue;
+    hasil.push({ id: `harian_${kid}`, h, kelas: kid, subjek: 'harian', guru: [...(k.guru || [])], kumpulan: [], waktu: [], mula: 'Harian', tamat: '', harian: true });
+  }
+
+  return hasil.sort((a, b) => (a.waktu[0] ?? 0) - (b.waktu[0] ?? 0) || a.kelas.localeCompare(b.kelas));
 }
 
 /**
@@ -209,5 +216,6 @@ export function gabungKamus(senarai) {
 
 /** Label waktu ringkas, cth [4,5] → "Waktu 4–5" */
 export function labelWaktu(waktu) {
+  if (!waktu || !waktu.length) return 'Sepanjang hari';
   return waktu.length > 1 ? `Waktu ${waktu[0]}–${waktu[waktu.length - 1]}` : `Waktu ${waktu[0]}`;
 }
