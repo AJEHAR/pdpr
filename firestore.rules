@@ -2,14 +2,12 @@ rules_version = '2';
 // ============================================================
 //  Peraturan keselamatan Firestore — Portal PDPR
 //  Firebase Console → Firestore Database → Rules → tampal → Publish
-//
-//  ⚠️ Tukar EMEL_SUPERADMIN di bawah kepada emel anda (huruf kecil),
-//     sama seperti SUPERADMIN_EMAIL dalam assets/js/config.js
+//  EMEL_SUPERADMIN mesti sama dengan SUPERADMIN_EMAIL dalam assets/js/config.js
 // ============================================================
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function EMEL_SUPERADMIN() { return 'emel.anda@moe-dl.edu.my'; }
+    function EMEL_SUPERADMIN() { return 'g-39150004@moe-dl.edu.my'; }
 
     function masuk() { return request.auth != null; }
     function emel() { return request.auth.token.email.lower(); }

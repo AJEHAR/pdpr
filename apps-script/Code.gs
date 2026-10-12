@@ -6,9 +6,9 @@
  * ============================================================
  */
 
-// ⚠️ ISI 3 NILAI INI
-const FIREBASE_API_KEY = 'TAMPAL_apiKey_DARI_config.js';
-const FIREBASE_PROJECT_ID = 'TAMPAL_projectId_DARI_config.js';
+// ⚠️ ISI FOLDER_INDUK_ID (2 nilai lain sudah diisi)
+const FIREBASE_API_KEY = 'AIzaSyC4it7TLf7gcU58lNqjPIgfBtxEyfpasK8';
+const FIREBASE_PROJECT_ID = 'pdpr-90934';
 const FOLDER_INDUK_ID = 'TAMPAL_ID_FOLDER_DRIVE'; // ID folder "PDPR" (bahagian akhir URL folder)
 
 const HAD_MB = 25; // had keselamatan pelayan (had sebenar ditetapkan di Admin → Tetapan)
