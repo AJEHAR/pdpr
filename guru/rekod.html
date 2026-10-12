@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rekod Saya · Portal PDPR</title>
+  <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main>
+  <div class="kepala">
+    <div>
+      <h1>Rekod Saya</h1>
+      <p class="lembut">Semua bahan yang anda muat naik, termasuk bagi pihak guru lain.</p>
+    </div>
+    <a class="btn" href="upload.html" id="btn-upload"></a>
+  </div>
+  <div class="statistik" id="statistik"></div>
+  <div id="senarai"><p class="memuat">Memuatkan…</p></div>
+</main>
+
+<script type="module">
+  import { kawal } from '../assets/js/auth.js';
+  import { pasangApp, esc, ikon, namaCantik, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
+  import { muatJadual, bahanSaya, padamBahan, muatTetapan } from '../assets/js/data.js';
+  import { HARI } from '../assets/js/jadual.js';
+  import { buangFail } from '../assets/js/upload.js';
+
+  const sesiAuth = await kawal('guru');
+  await pasangApp('guru/rekod.html', sesiAuth);
+  const { u } = sesiAuth;
+  document.getElementById('btn-upload').innerHTML = `${ikon('upload', 18)} Upload baharu`;
+
+  const [jadual, tetapan] = await Promise.all([muatJadual(), muatTetapan()]);
+
+  // ID sesi = kelas_subjek_hari_waktuMula
+  const labelSesi = (id) => {
+    const [k, s, , w] = id.split('_');
+    return `${jadual.kelas[k]?.nama || '?'} · ${jadual.subjek[s]?.ringkas || '?'} (W${w})`;
+  };
+
+  let data = [];
+  async function muat() {
+    data = await bahanSaya(u.uid);
+    const tarikhUnik = new Set(data.map((b) => b.tarikh));
+    const sesiUnik = new Set(data.flatMap((b) => (b.sesi || []).map((s) => b.tarikh + s)));
+    document.getElementById('statistik').innerHTML = `
+      <div class="stat"><small>Jumlah bahan</small><b>${data.length}</b></div>
+      <div class="stat"><small>Sesi diliputi</small><b>${sesiUnik.size}</b></div>
+      <div class="stat"><small>Hari PDPR</small><b>${tarikhUnik.size}</b></div>
+      <div class="stat"><small>Bagi pihak guru lain</small><b>${data.filter((b) => b.bagiPihak).length}</b></div>`;
+    lukis();
+  }
+
+  function lukis() {
+    const el = document.getElementById('senarai');
+    if (!data.length) {
+      el.innerHTML = `<div class="kosong"><div class="ikon">📂</div><p>Belum ada bahan dimuat naik.</p></div>`;
+      return;
+    }
+    const kump = {};
+    data.forEach((b) => (kump[b.tarikh] ??= []).push(b));
+    el.innerHTML = Object.entries(kump).map(([t, senarai]) => `
+      <div class="seksyen-tajuk"><h2>${esc(formatTarikh(t))}</h2><span class="lembut kecil">${senarai.length} bahan</span></div>
+      <div class="balut-jadual">
+        <table class="jadual-data jadual-kad">
+          <thead><tr><th>Bahan</th><th>Sesi</th><th>Catatan</th><th></th></tr></thead>
+          <tbody>${senarai.map((b) => `
+            <tr>
+              <td><a href="${esc(b.url)}" target="_blank" rel="noopener" style="display:inline-flex;gap:8px;align-items:center;font-weight:600">
+                ${ikon(b.jenis === 'pautan' ? 'pautan' : 'fail', 18)} ${esc(b.nama || b.url)}</a>
+                ${b.bagiPihak ? `<div><span class="lencana amaran">Bagi pihak ${esc(namaCantik(jadual.guru[b.guruId]?.nama || '?'))}</span></div>` : ''}</td>
+              <td data-label="Sesi">${(b.sesi || []).map((s) => `<div class="kecil">${esc(labelSesi(s))}</div>`).join('')}</td>
+              <td data-label="Catatan" class="kecil lembut">${esc(b.catatan || '—')}</td>
+              <td style="text-align:right"><button class="btn bahaya kecil" data-padam="${b.id}">${ikon('sampah', 16)} Padam</button></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`).join('');
+  }
+
+  document.getElementById('senarai').onclick = async (e) => {
+    const btn = e.target.closest('[data-padam]');
+    if (!btn) return;
+    const b = data.find((x) => x.id === btn.dataset.padam);
+    if (!confirm(`Padam "${b.nama || b.url}"?${b.jenis === 'fail' ? '\nFail juga akan dipindahkan ke Trash Google Drive.' : ''}`)) return;
+    btn.disabled = true;
+    try {
+      await padamBahan(b.id);
+      if (b.fileId) buangFail(b.fileId, tetapan.appsScriptUrl);
+      toast('Bahan dipadam');
+      muat();
+    } catch (err) {
+      toast(mesejRalat(err), 'ralat');
+      btn.disabled = false;
+    }
+  };
+
+  muat();
+</script>
+</body>
+</html>

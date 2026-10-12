@@ -1,0 +1,111 @@
+# Portal PDPR (Pembelajaran Di Rumah)
+
+Laman web berbilang halaman untuk guru memuat naik bahan PDPR mengikut jadual waktu,
+dan untuk murid/ibu bapa melihat bahan mengikut kelas dan tarikh. Ada susun atur
+**desktop** (sidebar, grid mingguan) dan **mobile** (tab bawah, senarai hari, kamera).
+
+**Teknologi:** GitHub Pages · Firebase Auth + Firestore · Google Apps Script + Drive
+
+## Status pembinaan
+
+| Fasa | Kandungan | Status |
+|---|---|---|
+| 1 | Penukar jadual aSc, enjin gabung sesi, laman utama, halaman awam kelas | ✅ |
+| 2 | Log masuk Google, pilih nama, Jadual Saya, Upload (fail/kamera/pautan, gabung sesi, guru ganti), Rekod Saya, Admin: papan pemuka, kalendar PDPR, pengguna, tetapan; Apps Script | ✅ |
+| 3 | Import jadual XML di laman, jadual prasekolah (mod harian), laporan julat tarikh | ⏳ |
+
+## Halaman
+
+| Laluan | Siapa | Fungsi |
+|---|---|---|
+| `index.html` | Awam | Status hari ini, senarai kelas |
+| `kelas.html?k=4-raub&t=2026-10-13` | Awam | Jadual & bahan satu kelas |
+| `login.html` → `daftar.html` | Guru | Log masuk Google; pilih nama (kali pertama sahaja) |
+| `guru/index.html` | Guru | Jadual Saya: grid mingguan (desktop) / tab hari (mobile) dengan status ✅/⭕ |
+| `guru/upload.html` | Guru | Pilih sesi (boleh gabung), fail/gambar kamera/pautan, catatan, guru ganti |
+| `guru/rekod.html` | Guru | Semua upload saya, padam |
+| `admin/index.html` | Admin | Pematuhan harian ikut guru/kelas, CSV |
+| `admin/kalendar.html` | Admin | Tanda hari PDPR (semua / kelas tertentu, julat tarikh) |
+| `admin/pengguna.html` | Admin | Luluskan Gmail, daftar awal emel (satu/pukal), lantik admin, pautkan semula nama |
+| `admin/tetapan.html` | Admin | Nama sekolah, logo, URL Apps Script, had saiz fail |
+
+## Cuba dahulu (mod demo)
+
+Selagi `apiKey` dalam `assets/js/config.js` kosong, laman berjalan dalam **mod demo**:
+semua data disimpan dalam browser anda sahaja, semua hari bekerja dianggap PDPR, dan akaun demo
+diberi peranan superadmin supaya semua halaman boleh dicuba.
+
+```bash
+npx serve .        # atau: python -m http.server 8000
+```
+
+## Pemasangan sebenar
+
+### 1. GitHub Pages + domain `pdpr.syazr.com`
+1. Cipta repositori (cth `pdpr`), push semua fail (termasuk fail `CNAME`).
+2. **Settings → Pages** → Branch `main`, folder `/ (root)`.
+3. Di panel DNS domain `syazr.com`, tambah rekod:
+
+   | Jenis | Nama / Host | Nilai |
+   |---|---|---|
+   | CNAME | `pdpr` | `<akaun-github>.github.io` |
+
+   (Jika guna Cloudflare, set proksi kepada **DNS only** / awan kelabu.)
+4. **Settings → Pages → Custom domain** → `pdpr.syazr.com` → Save. Tunggu semakan DNS lulus,
+   kemudian tanda **Enforce HTTPS** (sijil mengambil masa beberapa minit hingga sejam).
+5. Laman: `https://pdpr.syazr.com`
+
+### 2. Firebase
+1. **Project settings → Your apps → Web** → salin config ke `assets/js/config.js`.
+2. Dalam `config.js`, isi `SUPERADMIN_EMAIL` dengan emel anda (huruf kecil).
+3. **Firestore Database → Create** (lokasi `asia-southeast1`).
+4. **Firestore → Rules**: tampal `firestore.rules`, **tukar `EMEL_SUPERADMIN()`** kepada emel yang sama → Publish.
+5. **Authentication → Sign-in method → Google** → Enable.
+6. **Authentication → Settings → Authorized domains** → tambah `pdpr.syazr.com`.
+7. Log masuk pertama kali dengan emel superadmin → anda terus masuk ke Papan Pemuka.
+   Pautkan diri anda kepada nama dalam jadual di **Admin → Pengguna** jika anda juga guru.
+
+### 3. Apps Script (simpan fail ke Google Drive)
+
+> ⚠️ Gunakan **akaun Gmail biasa** (bukan DELiMa) untuk Apps Script dan folder Drive.
+> Akaun DELiMa biasanya menyekat perkongsian "sesiapa yang ada pautan", jadi ibu bapa tidak dapat membuka fail.
+
+1. Dalam Google Drive akaun tersebut, cipta folder `PDPR`. Salin ID folder (bahagian akhir URL).
+2. Buka https://script.google.com → **New project** → tampal isi `apps-script/Code.gs`.
+3. Isi `FIREBASE_API_KEY`, `FIREBASE_PROJECT_ID` dan `FOLDER_INDUK_ID`.
+4. Pilih fungsi `ujiKebenaran` → **Run** → benarkan akses.
+5. **Deploy → New deployment → Web app**: *Execute as* = **Me**, *Who has access* = **Anyone** → Deploy.
+6. Salin URL `.../exec` → tampal di **Admin → Tetapan → URL Web App** → **Uji sambungan** → Simpan.
+
+Fail disusun automatik: `PDPR / 2026-10 / 2026-10-13 / 4 RAUB / 4-RAUB_BI_KRY_lembaran.pdf`.
+Jika anda ubah `Code.gs`, buat **Deploy → Manage deployments → Edit → New version** (URL kekal sama).
+
+## Aliran akaun guru
+
+1. Admin boleh **daftar awal** emel guru (Admin → Pengguna → Daftar Awal). Guru ini terus masuk ke Jadual Saya.
+2. Guru yang belum didaftar memilih nama sendiri selepas log masuk:
+   - **DELiMa** (@moe-dl.edu.my) → diluluskan automatik
+   - **Gmail** → menunggu kelulusan admin (boleh lihat jadual, belum boleh upload)
+3. Satu nama hanya boleh dituntut sekali. Emel kedua untuk guru yang sama didaftar oleh admin.
+
+## Peraturan sesi
+
+- Waktu **berturut-turut** bagi kelas + subjek + guru yang sama digabung automatik (1 upload). Rehat memutuskan gabungan.
+- Guru boleh tanda beberapa sesi pada hari yang sama (berjauhan atau kelas gabungan) dan upload sekali.
+- Slot berkongsi guru (Tasmik, PI/PM): satu upload oleh mana-mana guru dikira selesai untuk semua.
+- **Guru ganti**: tanda "Upload bagi pihak guru lain". Rekod menyimpan guru asal dan siapa yang upload.
+
+## Struktur kod
+
+```
+assets/js/config.js    tetapan pemasangan (Firebase, superadmin)
+assets/js/firebase.js  muat SDK Firebase
+assets/js/data.js      semua akses data (Firestore / localStorage demo)
+assets/js/auth.js      log masuk, profil, kawalan akses
+assets/js/jadual.js    penukar XML aSc + enjin sesi
+assets/js/upload.js    hantar fail ke Apps Script, kecilkan gambar
+assets/js/ui.js        rangka awam & app (sidebar/tab bawah), ikon, toast
+apps-script/Code.gs    penerima fail Google Drive
+firestore.rules        peraturan keselamatan
+data/jadual.json       jadual semasa (tukar dengan tools/tukar-jadual.mjs)
+```

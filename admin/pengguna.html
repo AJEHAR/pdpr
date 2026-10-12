@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pengguna · Portal PDPR</title>
+  <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main>
+  <div class="kepala">
+    <div>
+      <h1>Pengguna</h1>
+      <p class="lembut">Luluskan akaun, daftar emel guru lebih awal, dan lantik admin.</p>
+    </div>
+  </div>
+  <div class="tab-segmen" role="tablist" id="tab" style="margin-bottom:18px"></div>
+  <div id="isi"><p class="memuat">Memuatkan…</p></div>
+</main>
+
+<script type="module">
+  import { kawal } from '../assets/js/auth.js';
+  import { pasangApp, esc, namaCantik, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
+  import { muatJadual, senarai, tulis, buang, kelompok } from '../assets/js/data.js';
+
+  const sesiAuth = await kawal('admin');
+  await pasangApp('admin/pengguna.html', sesiAuth);
+  const { u: saya, profil: profilSaya } = sesiAuth;
+  const superadmin = profilSaya.role === 'superadmin';
+
+  const $ = (id) => document.getElementById(id);
+  const jadual = await muatJadual();
+  const guruSusun = Object.entries(jadual.guru).sort((a, b) => a[1].nama.localeCompare(b[1].nama, 'ms'));
+  const namaGuru = (id) => (id ? namaCantik(jadual.guru[id]?.nama || '(tiada dalam jadual)') : '— Bukan guru —');
+  const PERANAN = { guru: 'Guru', admin: 'Admin', superadmin: 'Superadmin' };
+  const opsyenGuru = (pilih, kosong = '— Bukan guru —') =>
+    `<option value="">${kosong}</option>` + guruSusun.map(([id, g]) => `<option value="${id}" ${id === pilih ? 'selected' : ''}>${esc(namaCantik(g.nama))} (${esc(g.ringkas)})</option>`).join('');
+
+  let tab = new URLSearchParams(location.search).get('tab') || 'menunggu';
+  let D = { users: [], jemputan: [], tuntutan: [] };
+
+  async function muat() {
+    const [users, jemputan, tuntutan] = await Promise.all([senarai('users'), senarai('jemputan'), senarai('tuntutan')]);
+    D = { users, jemputan, tuntutan, tuntutanPeta: Object.fromEntries(tuntutan.map((t) => [t.id, t])) };
+    if (tab === 'menunggu' && !users.some((x) => x.status === 'menunggu')) tab = 'pengguna';
+    lukis();
+  }
+
+  function lukisTab() {
+    const menunggu = D.users.filter((x) => x.status === 'menunggu').length;
+    const belum = guruSusun.filter(([id]) => !D.tuntutanPeta[id]).length;
+    const T = [
+      ['menunggu', `Menunggu${menunggu ? ` (${menunggu})` : ''}`],
+      ['pengguna', `Pengguna (${D.users.length})`],
+      ['jemputan', `Daftar Awal (${D.jemputan.length})`],
+      ['belum', `Guru Belum Berdaftar (${belum})`],
+    ];
+    $('tab').innerHTML = T.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${tab === k}">${l}</button>`).join('');
+    $('tab').querySelectorAll('button').forEach((b) => (b.onclick = () => { tab = b.dataset.tab; history.replaceState(null, '', '?tab=' + tab); lukis(); }));
+  }
+
+  function lukis() {
+    lukisTab();
+    ({ menunggu: tabMenunggu, pengguna: tabPengguna, jemputan: tabJemputan, belum: tabBelum })[tab]();
+  }
+
+  // ---------- Menunggu ----------
+  function tabMenunggu() {
+    const m = D.users.filter((x) => x.status === 'menunggu');
+    $('isi').innerHTML = m.length ? `<div class="balut-jadual"><table class="jadual-data jadual-kad">
+      <thead><tr><th>Emel</th><th>Mengaku sebagai</th><th>Tarikh</th><th></th></tr></thead>
+      <tbody>${m.map((x) => `<tr>
+        <td><b>${esc(x.email)}</b>${x.nama ? `<div class="kecil lembut">${esc(x.nama)}</div>` : ''}</td>
+        <td data-label="Guru">${esc(namaGuru(x.guruId))}</td>
+        <td data-label="Tarikh" class="kecil">${x.masa ? esc(formatTarikh(x.masa.slice(0, 10), 'pendek')) : '—'}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="btn kecil" data-lulus="${x.id}">Luluskan</button>
+          <button class="btn bahaya kecil" data-tolak="${x.id}">Tolak</button></td>
+      </tr>`).join('')}</tbody></table></div>
+      <p class="bantuan">Pastikan emel Gmail itu benar-benar milik guru tersebut sebelum meluluskan.</p>`
+      : `<div class="kosong"><div class="ikon">✅</div><p>Tiada akaun menunggu kelulusan.</p></div>`;
+  }
+
+  // ---------- Pengguna ----------
+  function tabPengguna() {
+    const s = [...D.users].sort((a, b) => (a.role === 'superadmin' ? -1 : 0) - (b.role === 'superadmin' ? -1 : 0) || namaGuru(a.guruId).localeCompare(namaGuru(b.guruId), 'ms'));
+    $('isi').innerHTML = `<div class="balut-jadual"><table class="jadual-data jadual-kad">
+      <thead><tr><th>Emel</th><th>Nama dalam jadual</th><th>Peranan</th><th>Status</th><th></th></tr></thead>
+      <tbody>${s.map((x) => {
+        const kunci = x.role === 'superadmin' && !superadmin;
+        const diriSendiri = x.id === saya.uid;
+        return `<tr>
+          <td><b>${esc(x.email)}</b>${diriSendiri ? ' <span class="lencana">Anda</span>' : ''}</td>
+          <td data-label="Guru"><select data-guru="${x.id}" ${kunci ? 'disabled' : ''} style="min-width:200px">${opsyenGuru(x.guruId)}</select></td>
+          <td data-label="Peranan">${x.role === 'superadmin' ? '<span class="lencana">Superadmin</span>' :
+            `<select data-peranan="${x.id}"><option value="guru" ${x.role === 'guru' ? 'selected' : ''}>Guru</option><option value="admin" ${x.role === 'admin' ? 'selected' : ''}>Admin</option></select>`}</td>
+          <td data-label="Status">${x.status === 'lulus' ? '<span class="lencana">Lulus</span>' : '<span class="lencana amaran">Menunggu</span>'}</td>
+          <td style="text-align:right">${kunci || diriSendiri ? '' : `<button class="btn bahaya kecil" data-padam="${x.id}">Padam</button>`}</td>
+        </tr>`;
+      }).join('')}</tbody></table></div>
+      <p class="bantuan">Menukar nama dalam jadual memautkan akaun kepada guru lain. Padam akaun membenarkan orang itu memilih nama semula pada log masuk seterusnya.</p>`;
+  }
+
+  // ---------- Daftar awal ----------
+  function tabJemputan() {
+    const s = [...D.jemputan].sort((a, b) => a.id.localeCompare(b.id));
+    $('isi').innerHTML = `
+      <div class="upload-grid">
+        <section class="kad">
+          <h3>Daftar satu emel</h3>
+          <p class="bantuan" style="margin-top:0">Guru yang didaftarkan di sini terus masuk ke jadual sendiri tanpa perlu memilih nama atau menunggu kelulusan.</p>
+          <form id="f-satu">
+            <div class="medan"><label for="j-emel">Emel (DELiMa atau Gmail)</label><input type="email" id="j-emel" required placeholder="nama@moe-dl.edu.my"></div>
+            <div class="medan"><label for="j-guru">Nama dalam jadual</label><select id="j-guru">${opsyenGuru(new URLSearchParams(location.search).get('g') || '', '— Bukan guru (cth GB, PK, kerani) —')}</select></div>
+            <div class="medan"><label for="j-peranan">Peranan</label><select id="j-peranan"><option value="guru">Guru</option><option value="admin">Admin</option></select></div>
+            <button class="btn penuh">Daftar</button>
+          </form>
+        </section>
+        <section class="kad">
+          <h3>Daftar ramai sekali gus</h3>
+          <p class="bantuan" style="margin-top:0">Salin dari Excel: setiap baris <b>emel</b>, <b>kod ringkas atau nama guru</b>, <b>peranan</b> (pilihan). Dipisahkan dengan tab atau koma.</p>
+          <textarea id="pukal" rows="7" placeholder="khairiah@moe-dl.edu.my	KRY
+siti.zubaidah@gmail.com	SITI
+gb@moe-dl.edu.my		admin"></textarea>
+          <div id="pukal-pratonton"></div>
+          <div class="butang-baris"><button class="btn kedua" id="pukal-semak">Semak</button><button class="btn" id="pukal-simpan" disabled>Simpan semua</button></div>
+        </section>
+      </div>
+      <div class="seksyen-tajuk"><h2>Emel didaftarkan</h2><span class="lembut kecil">${s.length} emel</span></div>
+      ${s.length ? `<div class="balut-jadual"><table class="jadual-data jadual-kad">
+        <thead><tr><th>Emel</th><th>Guru</th><th>Peranan</th><th>Status log masuk</th><th></th></tr></thead>
+        <tbody>${s.map((j) => {
+          const aktif = D.users.some((x) => x.email === j.id);
+          return `<tr><td><b>${esc(j.id)}</b></td><td data-label="Guru">${esc(namaGuru(j.guruId))}</td>
+            <td data-label="Peranan">${PERANAN[j.role] || j.role}</td>
+            <td data-label="Status">${aktif ? '<span class="lencana">Sudah log masuk</span>' : '<span class="lencana tiada">Belum</span>'}</td>
+            <td style="text-align:right"><button class="btn bahaya kecil" data-batal="${esc(j.id)}">Buang</button></td></tr>`;
+        }).join('')}</tbody></table></div>` : `<p class="lembut">Belum ada emel didaftarkan.</p>`}`;
+
+    $('f-satu').onsubmit = async (e) => {
+      e.preventDefault();
+      try {
+        await daftarEmel($('j-emel').value, $('j-guru').value || null, $('j-peranan').value);
+        toast('Emel didaftarkan');
+        await muat();
+      } catch (err) { toast(mesejRalat(err), 'ralat'); }
+    };
+
+    let pukal = [];
+    $('pukal-semak').onclick = () => {
+      pukal = $('pukal').value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => {
+        const [emel = '', kunci = '', peranan = ''] = l.split(/\t|,|;/).map((x) => x.trim());
+        const k = kunci.toLowerCase();
+        const padan = !k ? null : guruSusun.find(([, g]) => g.ringkas.toLowerCase() === k) || guruSusun.find(([, g]) => g.nama.toLowerCase().includes(k));
+        const sah = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emel) && (!k || padan);
+        return { emel: emel.toLowerCase(), guruId: padan?.[0] || null, role: peranan.toLowerCase() === 'admin' ? 'admin' : 'guru', sah, kunci };
+      });
+      $('pukal-pratonton').innerHTML = `<div class="senarai-fail">${pukal.map((x) =>
+        `<div class="fail-item ${x.sah ? 'siap' : 'ralat'}"><span class="n">${esc(x.emel || '(tiada emel)')}</span>
+          <span class="s">${x.sah ? esc(namaGuru(x.guruId)) + ' · ' + PERANAN[x.role] : x.kunci ? `"${esc(x.kunci)}" tidak dijumpai` : 'Emel tidak sah'}</span></div>`).join('')}</div>`;
+      $('pukal-simpan').disabled = !pukal.some((x) => x.sah);
+    };
+    $('pukal-simpan').onclick = async () => {
+      const sah = pukal.filter((x) => x.sah);
+      if (!confirm(`Daftarkan ${sah.length} emel?`)) return;
+      $('pukal-simpan').disabled = true;
+      let n = 0;
+      for (const x of sah) { try { await daftarEmel(x.emel, x.guruId, x.role); n++; } catch (e) { console.error(e); } }
+      toast(`${n} emel didaftarkan`);
+      await muat();
+    };
+  }
+
+  // ---------- Guru belum berdaftar ----------
+  function tabBelum() {
+    const belum = guruSusun.filter(([id]) => !D.tuntutanPeta[id]);
+    $('isi').innerHTML = belum.length ? `<div class="balut-jadual"><table class="jadual-data jadual-kad">
+      <thead><tr><th>Guru</th><th>Kod</th><th></th></tr></thead>
+      <tbody>${belum.map(([id, g]) => `<tr><td><b>${esc(namaCantik(g.nama))}</b></td><td data-label="Kod">${esc(g.ringkas)}</td>
+        <td style="text-align:right"><button class="btn kedua kecil" data-daftar="${id}">Daftar emel</button></td></tr>`).join('')}</tbody></table></div>
+      <p class="bantuan">Guru dalam senarai ini belum log masuk dan belum didaftarkan oleh admin.</p>`
+      : `<div class="kosong"><div class="ikon">🎉</div><p>Semua guru dalam jadual sudah mempunyai akaun.</p></div>`;
+  }
+
+  // ---------- Tindakan ----------
+  async function daftarEmel(emel, guruId, role) {
+    emel = emel.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emel)) throw new Error('Emel tidak sah');
+    const ops = [{ kol: 'jemputan', id: emel, data: { guruId, role, oleh: saya.email, masa: new Date().toISOString() } }];
+    // Sembunyikan nama daripada senarai "pilih nama" (jika belum dituntut)
+    if (guruId && !D.tuntutanPeta[guruId]) ops.push({ kol: 'tuntutan', id: guruId, data: { email: emel, uid: null, sumber: 'admin' } });
+    await kelompok(ops);
+  }
+
+  $('isi').addEventListener('click', async (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    try {
+      if (b.dataset.lulus) {
+        await tulis('users', b.dataset.lulus, { status: 'lulus' }, true);
+        toast('Akaun diluluskan');
+      } else if (b.dataset.tolak || b.dataset.padam) {
+        const x = D.users.find((y) => y.id === (b.dataset.tolak || b.dataset.padam));
+        if (!confirm(`${b.dataset.tolak ? 'Tolak' : 'Padam'} akaun ${x.email}?`)) return;
+        const ops = [{ kol: 'users', id: x.id, padam: true }];
+        if (x.guruId && D.tuntutanPeta[x.guruId]?.uid === x.id) ops.push({ kol: 'tuntutan', id: x.guruId, padam: true });
+        await kelompok(ops);
+        toast('Akaun dibuang');
+      } else if (b.dataset.batal) {
+        const emel = b.dataset.batal;
+        const j = D.jemputan.find((y) => y.id === emel);
+        const ops = [{ kol: 'jemputan', id: emel, padam: true }];
+        const t = j?.guruId && D.tuntutanPeta[j.guruId];
+        if (t && t.email === emel && !t.uid) ops.push({ kol: 'tuntutan', id: j.guruId, padam: true });
+        await kelompok(ops);
+        toast('Emel dibuang');
+      } else if (b.dataset.daftar) {
+        tab = 'jemputan';
+        history.replaceState(null, '', `?tab=jemputan&g=${b.dataset.daftar}`);
+        lukis();
+        $('j-emel').focus();
+        return;
+      } else return;
+      await muat();
+    } catch (err) { toast(mesejRalat(err), 'ralat'); }
+  });
+
+  $('isi').addEventListener('change', async (e) => {
+    const s = e.target;
+    try {
+      if (s.dataset.peranan) {
+        const x = D.users.find((y) => y.id === s.dataset.peranan);
+        if (x.id === saya.uid && s.value === 'guru' && !confirm('Anda akan kehilangan akses admin. Teruskan?')) { s.value = x.role; return; }
+        await tulis('users', x.id, { role: s.value }, true);
+        toast(`${x.email} kini ${PERANAN[s.value]}`);
+      } else if (s.dataset.guru !== undefined && s.matches('[data-guru]')) {
+        const x = D.users.find((y) => y.id === s.dataset.guru);
+        const baru = s.value || null;
+        const t = baru && D.tuntutanPeta[baru];
+        if (t && t.uid && t.uid !== x.id && !confirm(`${namaGuru(baru)} sudah dipautkan kepada ${t.email}. Pautkan juga akaun ini (cth emel kedua guru yang sama)?`)) { s.value = x.guruId || ''; return; }
+        const ops = [];
+        if (x.guruId && D.tuntutanPeta[x.guruId]?.uid === x.id) ops.push({ kol: 'tuntutan', id: x.guruId, padam: true });
+        if (baru && !t) ops.push({ kol: 'tuntutan', id: baru, data: { uid: x.id, email: x.email } });
+        if (ops.length) await kelompok(ops);
+        await tulis('users', x.id, { guruId: baru }, true);
+        toast('Pautan guru dikemas kini');
+      } else return;
+      await muat();
+    } catch (err) { toast(mesejRalat(err), 'ralat'); muat(); }
+  });
+
+  muat();
+</script>
+</body>
+</html>

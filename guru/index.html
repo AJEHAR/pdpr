@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jadual Saya · Portal PDPR</title>
+  <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main>
+  <div class="kepala">
+    <div>
+      <h1 id="sapa">Jadual Saya</h1>
+      <p class="lembut" id="subtajuk"></p>
+    </div>
+    <div class="minggu-nav">
+      <button class="btn kedua kecil" id="sebelum" aria-label="Minggu sebelum"></button>
+      <b id="label-minggu"></b>
+      <button class="btn kedua kecil" id="selepas" aria-label="Minggu selepas"></button>
+      <button class="btn kedua kecil" id="kini">Minggu ini</button>
+    </div>
+  </div>
+
+  <div class="statistik" id="statistik"></div>
+  <div id="isi"><p class="memuat">Memuatkan jadual anda…</p></div>
+</main>
+
+<script type="module">
+  import { kawal } from '../assets/js/auth.js';
+  import { pasangApp, esc, ikon, namaCantik, hariIni, tambahHari, isninMinggu, formatTarikh } from '../assets/js/ui.js';
+  import { muatJadual, kalendarPdpr, kelasTerlibat, bahanJulat, petaSiap } from '../assets/js/data.js';
+  import { sesiHari, HARI, labelWaktu } from '../assets/js/jadual.js';
+
+  const sesiAuth = await kawal('guru', { perluGuru: true });
+  await pasangApp('guru/index.html', sesiAuth);
+  const { profil } = sesiAuth;
+
+  const $ = (id) => document.getElementById(id);
+  $('sebelum').innerHTML = ikon('kiri', 18);
+  $('selepas').innerHTML = ikon('kanan', 18);
+
+  const jadual = await muatJadual();
+  const saya = jadual.guru[profil.guruId];
+  $('sapa').textContent = `Salam, ${namaCantik(saya?.nama || profil.nama).split(' ').slice(0, 2).join(' ')}`;
+
+  const kini = hariIni();
+  const p = new URLSearchParams(location.search);
+  let isnin = isninMinggu(/^\d{4}-\d{2}-\d{2}$/.test(p.get('m') || '') ? p.get('m') : kini);
+  let hariMobile = null;
+
+  const W = Object.fromEntries(jadual.waktu.map((w) => [w.no, w]));
+  // Baris grid: kepala = 1; setiap waktu satu baris; tambah baris REHAT jika ada jurang masa
+  const baris = {};
+  let r = 2, rehatBaris = null;
+  jadual.waktu.forEach((w, i) => {
+    const sblm = jadual.waktu[i - 1];
+    if (sblm && sblm.tamat !== w.mula) { rehatBaris = r++; }
+    baris[w.no] = r++;
+  });
+
+  async function muat() {
+    history.replaceState(null, '', `?m=${isnin}`);
+    const tarikh = [0, 1, 2, 3, 4].map((i) => tambahHari(isnin, i));
+    $('label-minggu').textContent = `${formatTarikh(tarikh[0], 'pendek').replace(/^\S+\s/, '')} – ${formatTarikh(tarikh[4], 'pendek').replace(/^\S+\s/, '')}`;
+    $('isi').innerHTML = `<p class="memuat">Memuatkan…</p>`;
+
+    const [status, bahan] = await Promise.all([kalendarPdpr(tarikh[0], tarikh[4], tarikh), bahanJulat(tarikh[0], tarikh[4])]);
+    const siap = petaSiap(bahan);
+
+    // Bina data sesi + keadaan
+    let jumlah = 0, diisi = 0, hariIniBelum = 0;
+    const hari = tarikh.map((t, h) => {
+      const sesi = sesiHari(jadual, h, { guruId: profil.guruId }).map((s) => {
+        const pdpr = kelasTerlibat(status[t], s.kelas);
+        const ada = siap[t]?.has(s.id);
+        const keadaan = !pdpr ? 'bukan' : ada ? 'ada' : 'belum';
+        if (pdpr) { jumlah++; if (ada) diisi++; else if (t === kini) hariIniBelum++; }
+        const bilBahan = bahan.filter((b) => b.tarikh === t && (b.sesi || []).includes(s.id));
+        return { ...s, keadaan, bahan: bilBahan };
+      });
+      return { t, h, status: status[t], sesi, belum: sesi.filter((s) => s.keadaan === 'belum').length };
+    });
+
+    const peratus = jumlah ? Math.round((diisi / jumlah) * 100) : 0;
+    $('subtajuk').textContent = `${saya ? saya.ringkas + ' · ' : ''}${formatTarikh(kini)}`;
+    $('statistik').innerHTML = `
+      <div class="stat"><small>Sesi PDPR minggu ini</small><b>${jumlah}</b></div>
+      <div class="stat"><small>Sudah diisi</small><b>${diisi}</b><div class="bar-maju"><i style="width:${peratus}%"></i></div></div>
+      <div class="stat"><small>Belum diisi</small><b style="color:${jumlah - diisi ? '#a8650c' : 'inherit'}">${jumlah - diisi}</b></div>
+      <div class="stat"><small>Belum diisi hari ini</small><b>${hariIniBelum}</b></div>`;
+
+    const pautanUpload = (t, s) => `upload.html?t=${t}&sesi=${encodeURIComponent(s.id)}`;
+    const namaKelas = (s) => jadual.kelas[s.kelas]?.nama || '?';
+    const namaSubjek = (s, panjang) => (panjang ? jadual.subjek[s.subjek]?.nama : jadual.subjek[s.subjek]?.ringkas) || '?';
+
+    // ---------- Desktop: grid mingguan ----------
+    let g = `<div class="gm-kepala"></div>` + hari.map((d) => `
+      <div class="gm-kepala ${d.t === kini ? 'hari-ini' : ''}">${HARI[d.h]}<small>${formatTarikh(d.t, 'pendek').replace(/^\S+\s/, '')}</small>
+        ${d.status.aktif ? `<span class="lencana ${d.belum ? 'amaran' : ''}">PDPR${d.belum ? ` · ${d.belum} belum` : ' ✓'}</span>` : `<span class="lencana tiada">Biasa</span>`}
+      </div>`).join('');
+    g += jadual.waktu.map((w) => `<div class="gm-waktu" style="grid-row:${baris[w.no]};grid-column:1"><b>${w.no}</b>${w.mula}</div>`).join('');
+    if (rehatBaris) g += `<div class="gm-rehat" style="grid-row:${rehatBaris}">REHAT</div>`;
+    for (const d of hari) {
+      // Kumpul sesi yang bermula pada waktu sama (cth PM gabungan 2 kelas)
+      const kump = {};
+      d.sesi.forEach((s) => (kump[s.waktu[0]] ??= []).push(s));
+      for (const [mula, senarai] of Object.entries(kump)) {
+        const akhir = Math.max(...senarai.map((s) => s.waktu[s.waktu.length - 1]));
+        const span = `grid-column:${d.h + 2};grid-row:${baris[mula]} / ${baris[akhir] + 1};display:flex;flex-direction:column;gap:3px`;
+        g += `<div style="${span}">` + senarai.map((s) => {
+          const tag = s.keadaan === 'bukan' ? 'div' : 'a';
+          return `<${tag} class="gm-sesi ${s.keadaan}" style="flex:1" ${tag === 'a' ? `href="${pautanUpload(d.t, s)}"` : ''}
+            title="${esc(namaSubjek(s, true))} · ${esc(namaKelas(s))} · ${s.mula}–${s.tamat}">
+            <b>${esc(namaKelas(s))}</b><span>${esc(namaSubjek(s))}${s.kumpulan.length ? ' · ' + esc(s.kumpulan.join('/')) : ''}</span></${tag}>`;
+        }).join('') + `</div>`;
+      }
+    }
+    const desktop = `
+      <div class="paparan-desktop">
+        <div class="grid-minggu">${g}</div>
+        <div class="petunjuk">
+          <span><i style="background:var(--utama-cair);border:1px solid #b7dccd"></i>Sudah diisi</span>
+          <span><i style="background:var(--aksen-cair);border:1px solid #f1d29e"></i>Belum diisi (klik untuk upload)</span>
+          <span><i style="background:var(--kelabu-cair)"></i>Bukan hari PDPR</span>
+        </div>
+      </div>`;
+
+    // ---------- Mobile: tab hari + senarai ----------
+    if (hariMobile === null || !tarikh.includes(hariMobile)) hariMobile = tarikh.includes(kini) ? kini : tarikh[0];
+    const mobile = `
+      <div class="paparan-mobile">
+        <div class="tab-hari" role="tablist">${hari.map((d) => `
+          <button role="tab" data-t="${d.t}" aria-selected="${d.t === hariMobile}">
+            ${d.status.aktif ? `<i class="titik-kecil ${d.belum ? 'belum' : 'siap'}"></i>` : ''}
+            <small>${HARI[d.h].slice(0, 3)}</small><b>${+d.t.slice(8)}</b></button>`).join('')}
+        </div>
+        <div id="senarai-hari"></div>
+      </div>`;
+
+    $('isi').innerHTML = desktop + mobile;
+
+    const lukisHari = () => {
+      const d = hari.find((x) => x.t === hariMobile);
+      let html = `<div class="tajuk-hari"><h2>${esc(formatTarikh(d.t))}</h2>
+        ${d.status.aktif ? `<span class="lencana ${d.belum ? 'amaran' : ''}">${d.belum ? `${d.belum} belum diisi` : 'Semua diisi ✓'}</span>` : `<span class="lencana tiada">Bukan hari PDPR</span>`}</div>`;
+      if (d.status.catatan) html += `<div class="notis info">${esc(d.status.catatan)}</div>`;
+      if (!d.sesi.length) html += `<div class="kosong"><div class="ikon">☕</div><p>Tiada kelas pada hari ini.</p></div>`;
+      else {
+        let rehat = false;
+        html += `<div class="senarai-sesi">` + d.sesi.map((s) => {
+          let pisah = '';
+          if (!rehat && rehatBaris && baris[s.waktu[0]] > rehatBaris) { rehat = true; pisah = `<div class="rehat">— REHAT —</div>`; }
+          const tag = s.keadaan === 'bukan' ? 'div' : 'a';
+          const ket = s.keadaan === 'ada'
+            ? `<span class="lencana">✓ ${s.bahan.length} bahan</span>`
+            : s.keadaan === 'belum' ? `<span class="lencana amaran">${ikon('upload', 14)} Belum diisi — ketik untuk upload</span>` : `<span class="lencana tiada">Bukan PDPR</span>`;
+          return pisah + `<${tag} class="sesi ${s.keadaan}" ${tag === 'a' ? `href="${pautanUpload(d.t, s)}"` : ''}>
+            <div class="masa"><b>${s.mula}</b><small>${s.tamat}</small><small>${labelWaktu(s.waktu).replace('Waktu ', 'W')}</small></div>
+            <div class="isi"><h3>${esc(namaKelas(s))} · ${esc(namaSubjek(s))}</h3>
+              <div class="meta">${esc(namaSubjek(s, true))}${s.kumpulan.length ? ' · ' + esc(s.kumpulan.join(' & ')) : ''}${s.guru.length > 1 ? ' · dikongsi ' + s.guru.length + ' guru' : ''}</div>
+              ${ket}</div></${tag}>`;
+        }).join('') + `</div>`;
+      }
+      $('senarai-hari').innerHTML = html;
+    };
+    lukisHari();
+    document.querySelectorAll('.tab-hari button').forEach((b) => (b.onclick = () => {
+      hariMobile = b.dataset.t;
+      document.querySelectorAll('.tab-hari button').forEach((x) => x.setAttribute('aria-selected', x === b));
+      lukisHari();
+    }));
+  }
+
+  $('sebelum').onclick = () => { isnin = tambahHari(isnin, -7); muat(); };
+  $('selepas').onclick = () => { isnin = tambahHari(isnin, 7); muat(); };
+  $('kini').onclick = () => { isnin = isninMinggu(kini); hariMobile = null; muat(); };
+  muat();
+</script>
+</body>
+</html>

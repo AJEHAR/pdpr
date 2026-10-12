@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jadual Kelas · Portal PDPR</title>
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<main>
+  <h1>Jadual Kelas</h1>
+  <p class="lembut">Pilih kelas dan tarikh untuk melihat bahan pembelajaran bagi setiap waktu.</p>
+
+  <form class="penapis kad" id="penapis" onsubmit="return false">
+    <div>
+      <label for="kelas">Kelas</label>
+      <select id="kelas"></select>
+    </div>
+    <div>
+      <label for="tarikh">Tarikh</label>
+      <input type="date" id="tarikh">
+    </div>
+    <div class="nav-hari">
+      <button type="button" class="btn kedua" id="sebelum" aria-label="Hari sebelum">‹</button>
+      <button type="button" class="btn kedua" id="hariini">Hari ini</button>
+      <button type="button" class="btn kedua" id="selepas" aria-label="Hari selepas">›</button>
+    </div>
+  </form>
+
+  <div id="hasil"><p class="memuat">Memuatkan jadual…</p></div>
+</main>
+
+<script type="module">
+  import { pasangRangka, hariIni, hariBekerja, tambahHari, formatTarikh, esc, namaCantik } from './assets/js/ui.js';
+  import { muatJadual, statusPdpr, kelasTerlibat, bahanKelas } from './assets/js/data.js';
+  import { indeksHari, sesiHari, labelWaktu } from './assets/js/jadual.js';
+
+  pasangRangka('kelas.html');
+
+  const $ = (id) => document.getElementById(id);
+  const elKelas = $('kelas'), elTarikh = $('tarikh'), elHasil = $('hasil');
+
+  const ikonBahan = (b) => {
+    if (b.jenis === 'pautan') {
+      if (/youtu/.test(b.url)) return '▶️';
+      if (/forms\.(gle|google)/.test(b.url)) return '📝';
+      return '🔗';
+    }
+    if (/\.pdf$/i.test(b.nama || '')) return '📄';
+    if (/\.(png|jpe?g|gif|webp)$/i.test(b.nama || '')) return '🖼️';
+    return '📎';
+  };
+
+  const jadual = await muatJadual();
+  const senaraiKelas = Object.entries(jadual.kelas).sort((a, b) => a[1].nama.localeCompare(b[1].nama, 'ms', { numeric: true }));
+  const pra = senaraiKelas.filter(([, k]) => k.jenis === 'pra');
+  const biasa = senaraiKelas.filter(([, k]) => k.jenis !== 'pra');
+  const opsyen = (s) => s.map(([id, k]) => `<option value="${id}">${esc(k.nama)}</option>`).join('');
+  elKelas.innerHTML = `<option value="">— Pilih kelas —</option>` +
+    (pra.length ? `<optgroup label="Prasekolah">${opsyen(pra)}</optgroup>` : '') +
+    `<optgroup label="Tahun 1 – 6">${opsyen(biasa)}</optgroup>`;
+
+  // Baca parameter URL: ?k=4-raub&t=2026-10-12
+  const p = new URLSearchParams(location.search);
+  const slug = p.get('k');
+  const dariSlug = senaraiKelas.find(([, k]) => k.slug === slug);
+  if (dariSlug) elKelas.value = dariSlug[0];
+  else { try { elKelas.value = localStorage.getItem('pdpr-kelas') || ''; } catch {} }
+  elTarikh.value = /^\d{4}-\d{2}-\d{2}$/.test(p.get('t') || '') ? p.get('t') : hariBekerja(hariIni(), 1);
+
+  let giliran = 0; // elak hasil lama menimpa hasil baharu
+  async function papar() {
+    const kelasId = elKelas.value, tarikh = elTarikh.value;
+    const k = jadual.kelas[kelasId];
+    if (k) {
+      history.replaceState(null, '', `?k=${k.slug}&t=${tarikh}`);
+      try { localStorage.setItem('pdpr-kelas', kelasId); } catch {}
+    }
+    if (!k) { elHasil.innerHTML = `<div class="kosong"><div class="ikon">🏫</div><p>Pilih kelas untuk melihat jadual.</p></div>`; return; }
+
+    const h = indeksHari(tarikh);
+    if (h < 0) {
+      elHasil.innerHTML = `<div class="kosong"><div class="ikon">🌤️</div><p><b>${esc(formatTarikh(tarikh))}</b> ialah hujung minggu.</p></div>`;
+      return;
+    }
+
+    const saya = ++giliran;
+    elHasil.innerHTML = `<p class="memuat">Memuatkan…</p>`;
+    const [status, bahan] = await Promise.all([statusPdpr(tarikh), bahanKelas(tarikh, kelasId)]);
+    if (saya !== giliran) return;
+
+    const sesi = sesiHari(jadual, h, { kelasId });
+    const terlibat = kelasTerlibat(status, kelasId);
+    const bahanSesi = (id) => bahan.filter((b) => (b.sesi || []).includes(id));
+    const bahanHarian = bahan.filter((b) => !b.sesi || !b.sesi.length || b.sesi.includes('harian'));
+    const ada = sesi.filter((s) => bahanSesi(s.id).length).length;
+
+    const kadBahan = (b) => `<a href="${esc(b.url)}" target="_blank" rel="noopener">
+        <span class="ikon">${ikonBahan(b)}</span>
+        <span>${esc(b.nama || b.url)}${b.catatan ? `<span class="catatan">${esc(b.catatan)}</span>` : ''}</span>
+      </a>`;
+
+    let html = `
+      <div class="tajuk-hari">
+        <h2>${esc(k.nama)} · ${esc(formatTarikh(tarikh))}</h2>
+        ${terlibat ? `<span class="lencana">${ada}/${sesi.length} sesi ada bahan</span>` : `<span class="lencana tiada">Bukan hari PDPR</span>`}
+      </div>`;
+
+    if (!terlibat) html += `<div class="notis amaran">Tarikh ini bukan hari PDPR bagi kelas ini. Jadual di bawah ialah jadual biasa sebagai rujukan.</div>`;
+    else if (status.catatan) html += `<div class="notis info">${esc(status.catatan)}</div>`;
+
+    if (bahanHarian.length) {
+      html += `<div class="kad" style="margin-bottom:12px"><h3>Bahan hari ini</h3><div class="bahan">${bahanHarian.map(kadBahan).join('')}</div></div>`;
+    }
+
+    if (!sesi.length) {
+      html += `<div class="kosong"><div class="ikon">📭</div><p>Tiada sesi dijadualkan untuk kelas ini pada hari tersebut.</p></div>`;
+    } else {
+      let lepasRehat = false;
+      html += `<div class="senarai-sesi">` + sesi.map((s) => {
+        let pemisah = '';
+        if (!lepasRehat && s.mula >= '10:30') { lepasRehat = true; pemisah = `<div class="rehat">— REHAT —</div>`; }
+        const sub = jadual.subjek[s.subjek] || { nama: '?' };
+        const guru = s.guru.map((g) => namaCantik(jadual.guru[g]?.nama || '?')).join(', ');
+        const b = bahanSesi(s.id);
+        return pemisah + `
+          <article class="sesi ${b.length ? 'ada' : ''}">
+            <div class="masa"><b>${s.mula}</b><small>${s.tamat}</small><small>${labelWaktu(s.waktu)}</small></div>
+            <div class="isi">
+              <h3>${esc(sub.nama)}</h3>
+              <div class="meta">${esc(guru)}${s.kumpulan.length ? ` · ${esc(s.kumpulan.join(' & '))}` : ''}</div>
+              ${terlibat ? (b.length ? `<div class="bahan">${b.map(kadBahan).join('')}</div>` : `<span class="belum-teks">Bahan belum dimuat naik</span>`) : ''}
+            </div>
+          </article>`;
+      }).join('') + `</div>`;
+    }
+
+    html += `<div class="butang-baris">
+      <button class="btn kedua" id="kongsi">🔗 Salin pautan kelas</button>
+      <button class="btn kedua" onclick="print()">🖨️ Cetak</button></div>`;
+    elHasil.innerHTML = html;
+    $('kongsi').onclick = async (e) => {
+      const url = location.href;
+      try {
+        if (navigator.share) await navigator.share({ title: `PDPR ${k.nama}`, url });
+        else { await navigator.clipboard.writeText(url); e.target.textContent = '✓ Pautan disalin'; }
+      } catch {}
+    };
+  }
+
+  elKelas.onchange = papar;
+  elTarikh.onchange = papar;
+  $('sebelum').onclick = () => { elTarikh.value = hariBekerja(tambahHari(elTarikh.value, -1), -1); papar(); };
+  $('selepas').onclick = () => { elTarikh.value = hariBekerja(tambahHari(elTarikh.value, 1), 1); papar(); };
+  $('hariini').onclick = () => { elTarikh.value = hariBekerja(hariIni(), 1); papar(); };
+  papar();
+</script>
+</body>
+</html>

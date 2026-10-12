@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Upload Bahan · Portal PDPR</title>
+  <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main>
+  <div class="kepala">
+    <div>
+      <h1>Upload Bahan PDPR</h1>
+      <p class="lembut">Pilih sesi, kemudian muat naik fail atau tampal pautan.</p>
+    </div>
+  </div>
+
+  <div id="halaman"><p class="memuat">Memuatkan…</p></div>
+</main>
+
+<script type="module">
+  import { kawal } from '../assets/js/auth.js';
+  import { pasangApp, esc, ikon, namaCantik, hariIni, hariBekerja, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
+  import { muatJadual, statusPdpr, kelasTerlibat, bahanTarikh, tambahBahan, muatTetapan } from '../assets/js/data.js';
+  import { sesiHari, indeksHari, labelWaktu } from '../assets/js/jadual.js';
+  import { hantarFail, kecilkanGambar } from '../assets/js/upload.js';
+
+  const sesiAuth = await kawal('guru');
+  await pasangApp('guru/upload.html', sesiAuth);
+  const { u, profil } = sesiAuth;
+
+  const [jadual, tetapan] = await Promise.all([muatJadual(), muatTetapan()]);
+  const HAD = (tetapan.hadSaizMB || 10) * 1024 * 1024;
+  const p = new URLSearchParams(location.search);
+
+  const keadaan = {
+    tarikh: /^\d{4}-\d{2}-\d{2}$/.test(p.get('t') || '') ? p.get('t') : hariBekerja(hariIni(), 1),
+    guruId: p.get('g') || profil.guruId || '',
+    dipilih: new Set((p.get('sesi') || '').split(',').filter(Boolean)),
+    jenis: 'fail',
+    fail: [],
+  };
+  const bagiPihakPaksa = !profil.guruId; // admin bukan guru: sentiasa bagi pihak
+
+  const guruLain = Object.entries(jadual.guru).sort((a, b) => a[1].nama.localeCompare(b[1].nama, 'ms'));
+  const el = document.getElementById('halaman');
+  const saizMB = (b) => (b / 1024 / 1024).toFixed(b < 1024 * 1024 ? 2 : 1) + ' MB';
+
+  el.innerHTML = `
+    ${profil.status !== 'lulus' ? `<div class="notis amaran">Akaun anda belum diluluskan admin. Butang hantar akan aktif selepas kelulusan.</div>` : ''}
+    <div class="upload-grid">
+      <section class="kad">
+        <div class="langkah"><span class="no">1</span><h2>Tarikh & sesi</h2></div>
+        <div class="medan">
+          <label for="tarikh">Tarikh PDPR</label>
+          <input type="date" id="tarikh" value="${keadaan.tarikh}">
+        </div>
+        <div class="medan" ${bagiPihakPaksa ? 'hidden' : ''}>
+          <label class="suis"><input type="checkbox" id="bagi-pihak" ${keadaan.guruId && keadaan.guruId !== profil.guruId ? 'checked' : ''}> Upload bagi pihak guru lain (guru ganti)</label>
+        </div>
+        <div class="medan" id="medan-guru" ${!bagiPihakPaksa && keadaan.guruId === profil.guruId ? 'hidden' : ''}>
+          <label for="guru">Guru asal (yang tidak hadir)</label>
+          <select id="guru"><option value="">— Pilih guru —</option>${guruLain.filter(([id]) => id !== profil.guruId)
+            .map(([id, g]) => `<option value="${id}" ${id === keadaan.guruId ? 'selected' : ''}>${esc(namaCantik(g.nama))}</option>`).join('')}</select>
+        </div>
+        <div id="info-hari"></div>
+        <div class="pilih-sesi" id="sesi"></div>
+        <p class="bantuan">Tanda lebih daripada satu sesi untuk menggunakan bahan yang sama (cth waktu yang berjauhan, atau kelas gabungan).</p>
+      </section>
+
+      <section>
+        <div class="kad">
+          <div class="langkah"><span class="no">2</span><h2>Bahan</h2></div>
+          <div class="tab-segmen" role="tablist" style="margin-bottom:14px">
+            <button role="tab" data-jenis="fail" aria-selected="true">${ikon('fail', 16)} Fail / Gambar</button>
+            <button role="tab" data-jenis="pautan" aria-selected="false">${ikon('pautan', 16)} Pautan</button>
+          </div>
+          <div id="panel-fail">
+            <div class="zon-lepas" id="zon">
+              <div>Seret fail ke sini, atau</div>
+              <div class="butang-baris">
+                <label class="btn kedua" style="margin:0">${ikon('kamera', 18)} Ambil gambar
+                  <input type="file" accept="image/*" capture="environment" id="in-kamera" hidden multiple></label>
+                <label class="btn kedua" style="margin:0">${ikon('fail', 18)} Pilih fail
+                  <input type="file" id="in-fail" hidden multiple
+                    accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.webp,.heic,.mp3,.m4a,.mp4,.txt"></label>
+              </div>
+              <div class="bantuan" style="margin-top:10px">PDF, Word, PowerPoint, gambar, audio · maks ${tetapan.hadSaizMB || 10} MB setiap fail · gambar besar dikecilkan automatik</div>
+            </div>
+            <div class="senarai-fail" id="senarai-fail"></div>
+          </div>
+          <div id="panel-pautan" hidden>
+            <div class="medan"><label for="url">Pautan</label>
+              <input type="url" id="url" placeholder="https://… (Google Form, Wordwall, YouTube, Quizizz…)" inputmode="url"></div>
+            <div class="medan"><label for="tajuk">Tajuk (pilihan)</label>
+              <input type="text" id="tajuk" placeholder="cth Latihan Pecahan Bahagian 2"></div>
+          </div>
+        </div>
+
+        <div class="kad">
+          <div class="langkah"><span class="no">3</span><h2>Catatan (pilihan)</h2></div>
+          <textarea id="catatan" placeholder="Arahan untuk murid / ibu bapa, cth: Siapkan muka surat 12–13 dan hantar gambar kepada guru."></textarea>
+        </div>
+
+        <div class="melekit-bawah">
+          <div id="ringkasan" class="bantuan" style="margin-bottom:8px;text-align:center"></div>
+          <button class="btn penuh" id="hantar">${ikon('upload', 18)} Hantar</button>
+        </div>
+      </section>
+    </div>`;
+
+  const $ = (id) => document.getElementById(id);
+  let sesiHariIni = [], statusHari = { aktif: false }, sedia = new Map();
+
+  // ---------- Sesi ----------
+  async function muatSesi() {
+    const t = keadaan.tarikh, h = indeksHari(t);
+    history.replaceState(null, '', `?t=${t}${keadaan.guruId && keadaan.guruId !== profil.guruId ? '&g=' + keadaan.guruId : ''}${keadaan.dipilih.size ? '&sesi=' + [...keadaan.dipilih].join(',') : ''}`);
+    $('sesi').innerHTML = '';
+    if (!keadaan.guruId) { $('info-hari').innerHTML = `<div class="notis info">Pilih guru dahulu.</div>`; return kemaskini(); }
+    if (h < 0) { $('info-hari').innerHTML = `<div class="notis amaran">${esc(formatTarikh(t))} ialah hujung minggu.</div>`; sesiHariIni = []; return kemaskini(); }
+
+    $('info-hari').innerHTML = `<p class="lembut kecil">Memuatkan…</p>`;
+    const [st, bahan] = await Promise.all([statusPdpr(t), bahanTarikh(t)]);
+    statusHari = st;
+    sedia = new Map();
+    bahan.forEach((b) => (b.sesi || []).forEach((s) => sedia.set(s, (sedia.get(s) || 0) + 1)));
+    sesiHariIni = sesiHari(jadual, h, { guruId: keadaan.guruId });
+    // buang pilihan yang bukan milik hari/guru ini
+    keadaan.dipilih = new Set([...keadaan.dipilih].filter((id) => sesiHariIni.some((s) => s.id === id)));
+
+    const g = jadual.guru[keadaan.guruId];
+    $('info-hari').innerHTML = `
+      <p class="kecil" style="margin:0 0 10px"><b>${esc(formatTarikh(t))}</b>${keadaan.guruId !== profil.guruId ? ` · bagi pihak <b>${esc(namaCantik(g?.nama))}</b>` : ''}</p>
+      ${st.aktif ? (st.catatan ? `<div class="notis info">${esc(st.catatan)}</div>` : '') : `<div class="notis amaran">Tarikh ini <b>bukan hari PDPR</b>. Pilih tarikh lain.</div>`}`;
+
+    $('sesi').innerHTML = sesiHariIni.length ? sesiHariIni.map((s) => {
+      const pdpr = kelasTerlibat(st, s.kelas);
+      const n = sedia.get(s.id) || 0;
+      return `<label ${pdpr ? '' : 'style="opacity:.55"'}>
+        <input type="checkbox" value="${s.id}" ${keadaan.dipilih.has(s.id) ? 'checked' : ''} ${pdpr ? '' : 'disabled'}>
+        <span class="t"><b>${esc(jadual.kelas[s.kelas]?.nama)} · ${esc(jadual.subjek[s.subjek]?.nama)}</b>
+          <small>${s.mula}–${s.tamat} · ${labelWaktu(s.waktu)}${s.kumpulan.length ? ' · ' + esc(s.kumpulan.join(' & ')) : ''}</small></span>
+        ${!pdpr ? '<span class="lencana tiada">Bukan PDPR</span>' : n ? `<span class="lencana">✓ ${n}</span>` : '<span class="lencana amaran">Belum</span>'}
+      </label>`;
+    }).join('') : `<div class="kosong"><p>Tiada kelas pada hari ini.</p></div>`;
+    $('sesi').onchange = (e) => {
+      if (e.target.type !== 'checkbox') return;
+      e.target.checked ? keadaan.dipilih.add(e.target.value) : keadaan.dipilih.delete(e.target.value);
+      kemaskini();
+    };
+    kemaskini();
+  }
+
+  // ---------- Fail ----------
+  function tambahFail(senarai) {
+    for (const f of senarai) {
+      const besarSelepasKecil = f.type.startsWith('image/') ? f.size > HAD * 4 : f.size > HAD;
+      keadaan.fail.push({ f, ralat: besarSelepasKecil ? `Melebihi ${tetapan.hadSaizMB || 10} MB` : '' });
+    }
+    lukisFail();
+  }
+  function lukisFail() {
+    $('senarai-fail').innerHTML = keadaan.fail.map((x, i) => `
+      <div class="fail-item ${x.ralat ? 'ralat' : x.siap ? 'siap' : ''}">${ikon(x.siap ? 'tanda' : 'fail', 18)}
+        <span class="n">${esc(x.f.name)}</span><span class="s">${x.ralat || x.status || saizMB(x.f.size)}</span>
+        ${x.siap || x.sedang ? '' : `<button class="ik-btn" data-buang="${i}" title="Buang">${ikon('tutup', 16)}</button>`}
+      </div>`).join('');
+    kemaskini();
+  }
+  $('senarai-fail').onclick = (e) => {
+    const b = e.target.closest('[data-buang]');
+    if (b) { keadaan.fail.splice(+b.dataset.buang, 1); lukisFail(); }
+  };
+  $('in-kamera').onchange = (e) => { tambahFail(e.target.files); e.target.value = ''; };
+  $('in-fail').onchange = (e) => { tambahFail(e.target.files); e.target.value = ''; };
+  const zon = $('zon');
+  zon.ondragover = (e) => { e.preventDefault(); zon.classList.add('atas'); };
+  zon.ondragleave = () => zon.classList.remove('atas');
+  zon.ondrop = (e) => { e.preventDefault(); zon.classList.remove('atas'); tambahFail(e.dataTransfer.files); };
+
+  // ---------- Jenis ----------
+  document.querySelectorAll('[data-jenis]').forEach((b) => (b.onclick = () => {
+    keadaan.jenis = b.dataset.jenis;
+    document.querySelectorAll('[data-jenis]').forEach((x) => x.setAttribute('aria-selected', x === b));
+    $('panel-fail').hidden = keadaan.jenis !== 'fail';
+    $('panel-pautan').hidden = keadaan.jenis !== 'pautan';
+    kemaskini();
+  }));
+  $('url').oninput = kemaskini;
+
+  // ---------- Guru / tarikh ----------
+  $('tarikh').onchange = (e) => { keadaan.tarikh = e.target.value; muatSesi(); };
+  $('bagi-pihak').onchange = (e) => {
+    $('medan-guru').hidden = !e.target.checked;
+    keadaan.guruId = e.target.checked ? $('guru').value : profil.guruId;
+    keadaan.dipilih.clear();
+    muatSesi();
+  };
+  $('guru').onchange = (e) => { keadaan.guruId = e.target.value; keadaan.dipilih.clear(); muatSesi(); };
+
+  // ---------- Ringkasan & butang ----------
+  function bersihUrl(v) {
+    v = v.trim();
+    if (!v) return '';
+    if (!/^https?:\/\//i.test(v)) v = 'https://' + v;
+    try { return new URL(v).href; } catch { return ''; }
+  }
+  function kemaskini() {
+    const nSesi = keadaan.dipilih.size;
+    const failSah = keadaan.fail.filter((x) => !x.ralat && !x.siap);
+    const bahanOk = keadaan.jenis === 'fail' ? failSah.length > 0 : !!bersihUrl($('url').value);
+    const boleh = profil.status === 'lulus' && statusHari.aktif && nSesi > 0 && bahanOk;
+    $('hantar').disabled = !boleh;
+    $('ringkasan').textContent = !nSesi ? 'Pilih sekurang-kurangnya satu sesi'
+      : !bahanOk ? (keadaan.jenis === 'fail' ? 'Tambah fail atau gambar' : 'Masukkan pautan yang sah')
+      : `${keadaan.jenis === 'fail' ? failSah.length + ' fail' : '1 pautan'} → ${nSesi} sesi`;
+  }
+
+  // ---------- Hantar ----------
+  $('hantar').onclick = async () => {
+    const btn = $('hantar');
+    btn.disabled = true;
+    const sesiPilih = sesiHariIni.filter((s) => keadaan.dipilih.has(s.id));
+    const uniq = (a) => [...new Set(a)];
+    const g = jadual.guru[keadaan.guruId];
+    const asas = {
+      tarikh: keadaan.tarikh,
+      sesi: sesiPilih.map((s) => s.id),
+      kelasIds: uniq(sesiPilih.map((s) => s.kelas)),
+      subjekIds: uniq(sesiPilih.map((s) => s.subjek)),
+      guruIds: uniq(sesiPilih.flatMap((s) => s.guru)),
+      guruId: keadaan.guruId,
+      uid: u.uid,
+      olehGuruId: profil.guruId || null,
+      olehNama: profil.guruId ? jadual.guru[profil.guruId]?.nama || profil.nama : profil.nama || u.email,
+      bagiPihak: keadaan.guruId !== profil.guruId,
+      catatan: $('catatan').value.trim(),
+    };
+    const kelasUtama = jadual.kelas[asas.kelasIds[0]]?.nama || 'LAIN';
+    const awalan = [kelasUtama, jadual.subjek[asas.subjekIds[0]]?.ringkas, g?.ringkas].filter(Boolean).join('_').replace(/[\\/:*?"<>| ]+/g, '-');
+    let berjaya = 0, gagal = 0;
+
+    try {
+      if (keadaan.jenis === 'pautan') {
+        const url = bersihUrl($('url').value);
+        await tambahBahan({ ...asas, jenis: 'pautan', url, nama: $('tajuk').value.trim() || new URL(url).hostname.replace(/^www\./, ''), fileId: null });
+        berjaya = 1;
+      } else {
+        for (const x of keadaan.fail) {
+          if (x.ralat || x.siap) continue;
+          x.sedang = true; x.status = 'Memproses…'; lukisFail();
+          try {
+            const fail = await kecilkanGambar(x.f);
+            if (fail.size > HAD) throw new Error(`Melebihi ${tetapan.hadSaizMB || 10} MB`);
+            x.status = 'Memuat naik…'; lukisFail();
+            const r = await hantarFail(fail, { tarikh: asas.tarikh, kelas: kelasUtama, awalan }, tetapan.appsScriptUrl);
+            await tambahBahan({ ...asas, jenis: 'fail', url: r.url, nama: x.f.name, fileId: r.id });
+            x.siap = true; x.status = 'Siap'; berjaya++;
+          } catch (e) {
+            console.error(e);
+            x.ralat = mesejRalat(e); gagal++;
+          }
+          x.sedang = false; lukisFail();
+        }
+      }
+    } catch (e) {
+      console.error(e);
+      toast(mesejRalat(e), 'ralat');
+      btn.disabled = false;
+      return;
+    }
+
+    if (gagal && !berjaya) { toast('Muat naik gagal. Semak senarai fail.', 'ralat'); btn.disabled = false; return; }
+    const kelasSlug = jadual.kelas[asas.kelasIds[0]]?.slug;
+    el.innerHTML = `
+      <div class="kad kotak-masuk">
+        <div style="font-size:2.6rem">🎉</div>
+        <h2>Berjaya dihantar</h2>
+        <p class="lembut">${berjaya} bahan untuk ${asas.sesi.length} sesi pada ${esc(formatTarikh(asas.tarikh))}.${gagal ? ` <b>${gagal} fail gagal.</b>` : ''}</p>
+        <div class="butang-baris" style="justify-content:center">
+          <a class="btn" href="index.html?m=${asas.tarikh}">Kembali ke Jadual Saya</a>
+          <a class="btn kedua" href="upload.html?t=${asas.tarikh}${asas.bagiPihak ? '&g=' + asas.guruId : ''}">Upload lagi</a>
+          <a class="btn kedua" href="../kelas.html?k=${kelasSlug}&t=${asas.tarikh}" target="_blank">Lihat halaman kelas</a>
+        </div>
+      </div>`;
+  };
+
+  muatSesi();
+</script>
+</body>
+</html>

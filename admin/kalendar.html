@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kalendar PDPR · Portal PDPR</title>
+  <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main>
+  <div class="kepala">
+    <div>
+      <h1>Kalendar PDPR</h1>
+      <p class="lembut">Tandakan hari yang berjalan secara PDPR. Hanya hari ini dikira dalam laporan dan dibuka untuk upload.</p>
+    </div>
+  </div>
+
+  <div class="kal-susun">
+    <section class="kad">
+      <div class="seksyen-tajuk" style="margin-top:0">
+        <button class="btn kedua kecil" id="bln-sblm" aria-label="Bulan sebelum"></button>
+        <h2 id="label-bulan" style="margin:0"></h2>
+        <button class="btn kedua kecil" id="bln-slps" aria-label="Bulan selepas"></button>
+      </div>
+      <div class="kal" id="kal"></div>
+      <div class="petunjuk">
+        <span><i style="background:var(--utama)"></i>PDPR semua kelas</span>
+        <span><i style="background:var(--utama-cair);border:1px solid var(--utama-2)"></i>PDPR sebahagian kelas</span>
+        <span><i style="background:var(--kad);border:1px solid var(--garis)"></i>Sekolah biasa</span>
+      </div>
+    </section>
+
+    <section>
+      <div class="kad" id="panel"><p class="lembut">Klik satu tarikh pada kalendar untuk menetapkan status PDPR.</p></div>
+      <div class="kad">
+        <h3>Tetapkan julat tarikh</h3>
+        <p class="bantuan" style="margin-top:0">Untuk PDPR beberapa hari berturut-turut. Hujung minggu dilangkau.</p>
+        <div class="baris-medan">
+          <div class="medan"><label for="j-dari">Dari</label><input type="date" id="j-dari"></div>
+          <div class="medan"><label for="j-hingga">Hingga</label><input type="date" id="j-hingga"></div>
+        </div>
+        <div class="butang-baris" style="margin-top:0">
+          <button class="btn kecil" id="j-on">Tandakan PDPR (semua kelas)</button>
+          <button class="btn kedua kecil" id="j-off">Batalkan PDPR</button>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script type="module">
+  import { kawal } from '../assets/js/auth.js';
+  import { pasangApp, esc, ikon, hariIni, tambahHari, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
+  import { muatJadual, kalendarPdpr, setPdpr } from '../assets/js/data.js';
+  import { indeksHari } from '../assets/js/jadual.js';
+
+  const sesiAuth = await kawal('admin');
+  await pasangApp('admin/kalendar.html', sesiAuth);
+
+  const $ = (id) => document.getElementById(id);
+  $('bln-sblm').innerHTML = ikon('kiri', 18);
+  $('bln-slps').innerHTML = ikon('kanan', 18);
+  const jadual = await muatJadual();
+  const kelasSusun = Object.entries(jadual.kelas).sort((a, b) => a[1].nama.localeCompare(b[1].nama, 'ms', { numeric: true }));
+
+  const kini = hariIni();
+  const p = new URLSearchParams(location.search);
+  let dipilih = /^\d{4}-\d{2}-\d{2}$/.test(p.get('t') || '') ? p.get('t') : null;
+  let bulan = (dipilih || kini).slice(0, 7); // 'YYYY-MM'
+  let status = {};
+
+  const BULAN = ['Januari', 'Februari', 'Mac', 'April', 'Mei', 'Jun', 'Julai', 'Ogos', 'September', 'Oktober', 'November', 'Disember'];
+
+  async function muat() {
+    const [y, m] = bulan.split('-').map(Number);
+    $('label-bulan').textContent = `${BULAN[m - 1]} ${y}`;
+    const pertama = `${bulan}-01`;
+    const g = new Date(pertama + 'T00:00:00').getDay();
+    const mula = tambahHari(pertama, g === 0 ? -6 : 1 - g); // Isnin
+    const hari = Array.from({ length: 42 }, (_, i) => tambahHari(mula, i));
+    status = await kalendarPdpr(hari[0], hari[41], hari);
+    $('kal').innerHTML = ['Isn', 'Sel', 'Rab', 'Kha', 'Jum', 'Sab', 'Ahd'].map((x) => `<div class="kal-kepala">${x}</div>`).join('') +
+      hari.map((t) => {
+        const st = status[t];
+        const hujung = indeksHari(t) < 0;
+        const kls = [
+          t.slice(0, 7) !== bulan ? 'luar' : '',
+          hujung ? 'hujung' : st.aktif ? (st.kelas === 'semua' ? 'pdpr' : 'separa') : '',
+          t === kini ? 'ini' : '', t === dipilih ? 'dipilih' : '',
+        ].join(' ');
+        const ket = !hujung && st.aktif ? (st.kelas === 'semua' ? 'PDPR' : `${st.kelas.length} kelas`) : '';
+        return `<button class="kal-hari ${kls}" data-t="${t}" ${hujung ? 'disabled' : ''}><b>${+t.slice(8)}</b><small>${ket}</small></button>`;
+      }).join('');
+  }
+
+  function panel() {
+    if (!dipilih) return;
+    const st = status[dipilih] || { aktif: false, kelas: 'semua', catatan: '' };
+    const sebahagian = st.kelas !== 'semua';
+    $('panel').innerHTML = `
+      <h3>${esc(formatTarikh(dipilih))}</h3>
+      <div class="medan"><label class="suis"><input type="checkbox" id="p-aktif" ${st.aktif ? 'checked' : ''}> Hari PDPR</label></div>
+      <div id="p-pilihan" ${st.aktif ? '' : 'hidden'}>
+        <div class="medan">
+          <label>Kelas terlibat</label>
+          <div class="tab-segmen">
+            <button type="button" data-skop="semua" aria-selected="${!sebahagian}">Semua kelas</button>
+            <button type="button" data-skop="pilih" aria-selected="${sebahagian}">Kelas tertentu</button>
+          </div>
+        </div>
+        <div class="medan" id="p-kelas" ${sebahagian ? '' : 'hidden'}>
+          <div class="senarai-semak">${kelasSusun.map(([id, k]) =>
+            `<label><input type="checkbox" value="${id}" ${sebahagian && st.kelas.includes(id) ? 'checked' : ''}> ${esc(k.nama)}</label>`).join('')}</div>
+        </div>
+        <div class="medan"><label for="p-catatan">Catatan (dipaparkan kepada guru & ibu bapa)</label>
+          <input type="text" id="p-catatan" value="${esc(st.catatan)}" placeholder="cth PDPR kerana banjir"></div>
+      </div>
+      <button class="btn penuh" id="p-simpan">Simpan</button>`;
+    let skop = sebahagian ? 'pilih' : 'semua';
+    $('p-aktif').onchange = (e) => ($('p-pilihan').hidden = !e.target.checked);
+    document.querySelectorAll('[data-skop]').forEach((b) => (b.onclick = () => {
+      skop = b.dataset.skop;
+      document.querySelectorAll('[data-skop]').forEach((x) => x.setAttribute('aria-selected', x === b));
+      $('p-kelas').hidden = skop !== 'pilih';
+    }));
+    $('p-simpan').onclick = async () => {
+      const aktif = $('p-aktif').checked;
+      const kelas = skop === 'semua' ? 'semua' : [...document.querySelectorAll('#p-kelas input:checked')].map((i) => i.value);
+      if (aktif && skop === 'pilih' && !kelas.length) return toast('Pilih sekurang-kurangnya satu kelas', 'ralat');
+      try {
+        await setPdpr(dipilih, { aktif, kelas, catatan: $('p-catatan').value.trim() });
+        toast(aktif ? 'Hari PDPR disimpan' : 'PDPR dibatalkan');
+        await muat();
+      } catch (e) { toast(mesejRalat(e), 'ralat'); }
+    };
+  }
+
+  $('kal').onclick = (e) => {
+    const b = e.target.closest('[data-t]');
+    if (!b || b.disabled) return;
+    dipilih = b.dataset.t;
+    document.querySelectorAll('.kal-hari.dipilih').forEach((x) => x.classList.remove('dipilih'));
+    b.classList.add('dipilih');
+    panel();
+    if (innerWidth < 900) $('panel').scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const tukarBulan = (n) => {
+    const [y, m] = bulan.split('-').map(Number);
+    const d = new Date(y, m - 1 + n, 1);
+    bulan = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    muat();
+  };
+  $('bln-sblm').onclick = () => tukarBulan(-1);
+  $('bln-slps').onclick = () => tukarBulan(1);
+
+  async function julat(aktif) {
+    const dari = $('j-dari').value, hingga = $('j-hingga').value;
+    if (!dari || !hingga || hingga < dari) return toast('Pilih julat tarikh yang sah', 'ralat');
+    const senarai = [];
+    for (let t = dari; t <= hingga; t = tambahHari(t, 1)) if (indeksHari(t) >= 0) senarai.push(t);
+    if (senarai.length > 60) return toast('Julat terlalu panjang (maks 60 hari bekerja)', 'ralat');
+    if (!confirm(`${aktif ? 'Tandakan' : 'Batalkan'} PDPR untuk ${senarai.length} hari bekerja?`)) return;
+    try {
+      await Promise.all(senarai.map((t) => setPdpr(t, { aktif, kelas: 'semua', catatan: '' })));
+      toast(`${senarai.length} hari dikemas kini`);
+      bulan = dari.slice(0, 7);
+      muat();
+    } catch (e) { toast(mesejRalat(e), 'ralat'); }
+  }
+  $('j-on').onclick = () => julat(true);
+  $('j-off').onclick = () => julat(false);
+
+  await muat();
+  panel();
+</script>
+</body>
+</html>

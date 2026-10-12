@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Portal PDPR</title>
+  <meta name="description" content="Portal Pembelajaran Di Rumah — jadual dan bahan pembelajaran setiap kelas.">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<main>
+  <section class="wira">
+    <div class="kad sapa">
+      <h1>Pembelajaran Di Rumah</h1>
+      <p>Lihat jadual kelas anak anda dan buka lembaran kerja, pautan serta bahan yang disediakan oleh guru bagi setiap waktu.</p>
+      <div class="butang-baris">
+        <a class="btn" href="kelas.html">Lihat Jadual Kelas</a>
+        <a class="btn kedua" href="login.html">Log Masuk Guru</a>
+      </div>
+    </div>
+    <div class="kad status-hari" id="status">
+      <span class="lembut">Memuatkan status hari ini…</span>
+    </div>
+  </section>
+
+  <div id="senarai"><p class="memuat">Memuatkan senarai kelas…</p></div>
+</main>
+
+<script type="module">
+  import { pasangRangka, hariIni, hariBekerja, formatTarikh, esc } from './assets/js/ui.js';
+  import { muatJadual, statusPdpr, kelasTerlibat, bahanTarikh } from './assets/js/data.js';
+  import { indeksHari, sesiHari } from './assets/js/jadual.js';
+
+  pasangRangka('index.html');
+
+  const kini = hariIni();
+  const sasaran = hariBekerja(kini, 1); // jika hujung minggu → Isnin akan datang
+  const elStatus = document.getElementById('status');
+  const elSenarai = document.getElementById('senarai');
+
+  try {
+    const [jadual, status, bahan] = await Promise.all([muatJadual(), statusPdpr(sasaran), bahanTarikh(sasaran)]);
+    const label = sasaran === kini ? 'Hari ini' : 'Hari persekolahan seterusnya';
+
+    elStatus.innerHTML = `
+      <span class="lembut">${label}</span>
+      <span class="besar">${esc(formatTarikh(sasaran))}</span>
+      <span><i class="titik ${status.aktif ? 'on' : ''}"></i>${
+        status.aktif
+          ? status.kelas === 'semua' ? '<b>PDPR berjalan</b> untuk semua kelas' : `<b>PDPR</b> untuk ${status.kelas.length} kelas`
+          : '<b>Tiada PDPR</b> — sesi persekolahan biasa'
+      }</span>
+      ${status.catatan ? `<small class="lembut">${esc(status.catatan)}</small>` : ''}`;
+
+    // Kira bahan per kelas
+    const kiraBahan = {};
+    bahan.forEach((b) => (b.kelasIds || []).forEach((k) => (kiraBahan[k] = (kiraBahan[k] || 0) + 1)));
+
+    const h = indeksHari(sasaran);
+    const susun = (a, b) => a[1].nama.localeCompare(b[1].nama, 'ms', { numeric: true });
+    const semua = Object.entries(jadual.kelas).sort(susun);
+    const kumpulan = [
+      ['Prasekolah', semua.filter(([, k]) => k.jenis === 'pra')],
+      ['Tahun 1 – 6', semua.filter(([, k]) => k.jenis !== 'pra')],
+    ].filter(([, s]) => s.length);
+
+    elSenarai.innerHTML = kumpulan.map(([tajuk, senarai]) => `
+      <div class="seksyen-tajuk"><h2>${tajuk}</h2><span class="lembut">${senarai.length} kelas</span></div>
+      <div class="grid-kelas">${senarai.map(([id, k]) => {
+        const nSesi = h >= 0 ? sesiHari(jadual, h, { kelasId: id }).length : 0;
+        const terlibat = kelasTerlibat(status, id);
+        const n = kiraBahan[id] || 0;
+        return `<a class="kelas-kad" href="kelas.html?k=${k.slug}&t=${sasaran}">
+          <b>${esc(k.nama)}</b>
+          <small>${nSesi} sesi · ${terlibat ? `${n} bahan` : 'tiada PDPR'}</small>
+        </a>`;
+      }).join('')}</div>`).join('');
+  } catch (e) {
+    console.error(e);
+    elSenarai.innerHTML = `<div class="notis amaran">Gagal memuatkan data. Sila cuba muat semula halaman.</div>`;
+  }
+</script>
+</body>
+</html>

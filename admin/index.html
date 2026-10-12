@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Papan Pemuka · Portal PDPR</title>
+  <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main>
+  <div class="kepala">
+    <div>
+      <h1>Papan Pemuka</h1>
+      <p class="lembut" id="subtajuk">Pematuhan PDPR mengikut tarikh</p>
+    </div>
+    <div class="nav-hari">
+      <button class="btn kedua kecil" id="sebelum" aria-label="Hari sebelum"></button>
+      <input type="date" id="tarikh" style="width:auto">
+      <button class="btn kedua kecil" id="selepas" aria-label="Hari selepas"></button>
+    </div>
+  </div>
+  <div id="amaran-akaun"></div>
+  <div class="statistik" id="statistik"></div>
+  <div id="isi"><p class="memuat">Memuatkan…</p></div>
+</main>
+
+<script type="module">
+  import { kawal } from '../assets/js/auth.js';
+  import { pasangApp, esc, ikon, namaCantik, hariIni, hariBekerja, tambahHari, formatTarikh } from '../assets/js/ui.js';
+  import { muatJadual, statusPdpr, kelasTerlibat, bahanTarikh, petaSiap, senarai } from '../assets/js/data.js';
+  import { sesiHari, indeksHari, labelWaktu } from '../assets/js/jadual.js';
+
+  const sesiAuth = await kawal('admin');
+  await pasangApp('admin/index.html', sesiAuth);
+
+  const $ = (id) => document.getElementById(id);
+  $('sebelum').innerHTML = ikon('kiri', 18);
+  $('selepas').innerHTML = ikon('kanan', 18);
+  const jadual = await muatJadual();
+  const p = new URLSearchParams(location.search);
+  $('tarikh').value = /^\d{4}-\d{2}-\d{2}$/.test(p.get('t') || '') ? p.get('t') : hariBekerja(hariIni(), -1);
+  let paparan = 'guru';
+
+  // Akaun menunggu kelulusan
+  senarai('users', [['status', '==', 'menunggu']]).then((m) => {
+    if (m.length) $('amaran-akaun').innerHTML = `<div class="notis amaran"><b>${m.length} akaun</b> menunggu kelulusan. <a href="pengguna.html">Semak sekarang →</a></div>`;
+  }).catch(() => {});
+
+  let laporan = null;
+
+  async function muat() {
+    const t = $('tarikh').value;
+    history.replaceState(null, '', `?t=${t}`);
+    $('subtajuk').textContent = formatTarikh(t);
+    $('isi').innerHTML = `<p class="memuat">Memuatkan…</p>`;
+    const h = indeksHari(t);
+    if (h < 0) { $('statistik').innerHTML = ''; $('isi').innerHTML = `<div class="kosong"><div class="ikon">🌤️</div><p>Hujung minggu.</p></div>`; return; }
+
+    const [status, bahan] = await Promise.all([statusPdpr(t), bahanTarikh(t)]);
+    if (!status.aktif) {
+      $('statistik').innerHTML = '';
+      $('isi').innerHTML = `<div class="kosong"><div class="ikon">🏫</div><p><b>Bukan hari PDPR.</b><br>Tandakan tarikh ini sebagai hari PDPR di <a href="kalendar.html?t=${t}">Kalendar PDPR</a>.</p></div>`;
+      return;
+    }
+    const siap = petaSiap(bahan)[t] || new Set();
+    const sesi = sesiHari(jadual, h).filter((s) => kelasTerlibat(status, s.kelas)).map((s) => ({ ...s, ada: siap.has(s.id) }));
+    const diisi = sesi.filter((s) => s.ada).length;
+    const pc = sesi.length ? Math.round((diisi / sesi.length) * 100) : 0;
+    const bagiPihak = bahan.filter((b) => b.bagiPihak).length;
+
+    $('statistik').innerHTML = `
+      <div class="stat"><small>Sesi PDPR</small><b>${sesi.length}</b></div>
+      <div class="stat"><small>Sudah diisi</small><b>${diisi}</b><div class="bar-maju"><i style="width:${pc}%"></i></div></div>
+      <div class="stat"><small>Belum diisi</small><b style="color:${sesi.length - diisi ? '#a8650c' : 'inherit'}">${sesi.length - diisi}</b></div>
+      <div class="stat"><small>Pematuhan</small><b>${pc}%</b></div>
+      <div class="stat"><small>Bahan dimuat naik</small><b>${bahan.length}</b>${bagiPihak ? `<small>${bagiPihak} oleh guru ganti</small>` : ''}</div>`;
+
+    // Ikut guru (sesi dikongsi dikira untuk setiap guru)
+    const ikutGuru = {};
+    for (const s of sesi) for (const g of s.guru) (ikutGuru[g] ??= []).push(s);
+    // Ikut kelas
+    const ikutKelas = {};
+    for (const s of sesi) (ikutKelas[s.kelas] ??= []).push(s);
+
+    laporan = { t, sesi, ikutGuru, ikutKelas };
+    lukis();
+  }
+
+  const barisSesi = (s, denganGuru) => `<div class="kecil" style="padding:2px 0">
+      ${s.ada ? '✅' : '⭕'} ${s.mula} · ${esc(jadual.kelas[s.kelas]?.nama)} · ${esc(jadual.subjek[s.subjek]?.ringkas)} (${labelWaktu(s.waktu)})
+      ${denganGuru ? ' · ' + esc(s.guru.map((g) => jadual.guru[g]?.ringkas).join(', ')) : ''}</div>`;
+
+  function lukis() {
+    const { sesi, ikutGuru, ikutKelas } = laporan;
+    const sumber = paparan === 'guru' ? ikutGuru : ikutKelas;
+    const nama = (id) => paparan === 'guru' ? namaCantik(jadual.guru[id]?.nama || id) : jadual.kelas[id]?.nama || id;
+    const baris = Object.entries(sumber).map(([id, s]) => ({ id, s, n: s.length, ada: s.filter((x) => x.ada).length }))
+      .sort((a, b) => (b.n - b.ada) - (a.n - a.ada) || nama(a.id).localeCompare(nama(b.id), 'ms', { numeric: true }));
+
+    $('isi').innerHTML = `
+      <div class="seksyen-tajuk">
+        <div class="tab-segmen" role="tablist">
+          <button data-p="guru" aria-selected="${paparan === 'guru'}">Ikut guru</button>
+          <button data-p="kelas" aria-selected="${paparan === 'kelas'}">Ikut kelas</button>
+        </div>
+        <button class="btn kedua kecil" id="csv">${ikon('fail', 16)} Muat turun CSV</button>
+      </div>
+      <div class="balut-jadual">
+        <table class="jadual-data jadual-kad">
+          <thead><tr><th>${paparan === 'guru' ? 'Guru' : 'Kelas'}</th><th>Diisi</th><th style="width:30%">Kemajuan</th><th>Sesi belum diisi</th></tr></thead>
+          <tbody>${baris.map((r) => {
+            const pc = Math.round((r.ada / r.n) * 100);
+            const belum = r.s.filter((x) => !x.ada);
+            return `<tr>
+              <td><b>${esc(nama(r.id))}</b>${paparan === 'guru' ? `<div class="kecil lembut">${esc(jadual.guru[r.id]?.ringkas || '')}</div>` : ''}</td>
+              <td data-label="Diisi"><b>${r.ada}</b> / ${r.n}</td>
+              <td data-label="Kemajuan"><div class="bar-maju" style="margin:0"><i style="width:${pc}%;background:${pc === 100 ? 'var(--utama-2)' : pc >= 50 ? 'var(--aksen)' : 'var(--bahaya)'}"></i></div></td>
+              <td data-label="Belum">${belum.length ? `<details><summary class="kecil" style="cursor:pointer">${belum.length} sesi</summary>${belum.map((s) => barisSesi(s, paparan === 'kelas')).join('')}</details>` : '<span class="lencana">Lengkap ✓</span>'}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+      </div>`;
+
+    document.querySelectorAll('[data-p]').forEach((b) => (b.onclick = () => { paparan = b.dataset.p; lukis(); }));
+    $('csv').onclick = () => {
+      const kepala = ['Tarikh', 'Mula', 'Tamat', 'Waktu', 'Kelas', 'Subjek', 'Guru', 'Status'];
+      const isi = sesi.map((s) => [laporan.t, s.mula, s.tamat, s.waktu.join('-'), jadual.kelas[s.kelas]?.nama, jadual.subjek[s.subjek]?.nama,
+        s.guru.map((g) => jadual.guru[g]?.nama).join(' / '), s.ada ? 'Diisi' : 'Belum']);
+      const csv = [kepala, ...isi].map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
+      a.download = `PDPR_${laporan.t}.csv`;
+      a.click();
+    };
+  }
+
+  $('tarikh').onchange = muat;
+  $('sebelum').onclick = () => { $('tarikh').value = hariBekerja(tambahHari($('tarikh').value, -1), -1); muat(); };
+  $('selepas').onclick = () => { $('tarikh').value = hariBekerja(tambahHari($('tarikh').value, 1), 1); muat(); };
+  muat();
+</script>
+</body>
+</html>

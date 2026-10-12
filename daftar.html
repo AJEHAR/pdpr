@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Siapa Anda? · Portal PDPR</title>
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<main>
+  <div class="kad kotak-masuk" id="kotak">
+    <p class="memuat">Memuatkan…</p>
+  </div>
+</main>
+
+<script type="module">
+  import { pasangRangka, esc, namaCantik, mesejRalat, akar } from './assets/js/ui.js';
+  import { penggunaSemasa, pastikanProfil, namaDituntut, tuntutNama, emelDelima, logKeluar } from './assets/js/auth.js';
+  import { muatJadual, MOD_DEMO } from './assets/js/data.js';
+
+  pasangRangka('login.html');
+  const kotak = document.getElementById('kotak');
+
+  const u = await penggunaSemasa();
+  if (!u) { location.replace('login.html'); await new Promise(() => {}); }
+  const sedia = await pastikanProfil(u);
+  if (sedia) { location.replace(akar + (sedia.guruId ? 'guru/index.html' : 'admin/index.html')); await new Promise(() => {}); }
+
+  const [jadual, dituntut] = await Promise.all([muatJadual(), namaDituntut()]);
+  const guru = Object.entries(jadual.guru)
+    .filter(([id]) => !dituntut.has(id))
+    .sort((a, b) => a[1].nama.localeCompare(b[1].nama, 'ms'));
+  const delima = MOD_DEMO || emelDelima(u.email);
+
+  kotak.innerHTML = `
+    <h1 style="font-size:1.45rem">Siapa anda?</h1>
+    <p class="lembut kecil">Log masuk sebagai <b>${esc(u.email)}</b>. Pilih nama anda dalam jadual waktu.
+      Ini dilakukan <b>sekali sahaja</b>.</p>
+    ${delima ? '' : `<div class="notis amaran" style="text-align:left">Anda menggunakan akaun Gmail. Selepas memilih nama, admin perlu meluluskan akaun anda sebelum anda boleh memuat naik bahan.</div>`}
+    <input type="search" id="cari" placeholder="Taip nama anda…" autocomplete="off" autofocus>
+    <div class="senarai-nama" id="senarai"></div>
+    <p class="bantuan" style="margin-top:14px">Nama tiada dalam senarai? Ia mungkin sudah dipautkan kepada akaun lain, atau anda bukan guru (cth pentadbir).
+      Hubungi admin sekolah untuk mendaftarkan emel anda.</p>
+    <button class="btn kedua kecil" id="keluar">Log keluar / tukar akaun</button>`;
+
+  const elSenarai = document.getElementById('senarai');
+  const lukis = (q = '') => {
+    const k = q.trim().toLowerCase();
+    const hasil = guru.filter(([, g]) => !k || g.nama.toLowerCase().includes(k) || g.ringkas.toLowerCase() === k);
+    elSenarai.innerHTML = hasil.length
+      ? hasil.map(([id, g]) => `<button data-id="${id}"><span class="avatar">${esc(g.ringkas.slice(0, 3))}</span><span>${esc(namaCantik(g.nama))}</span></button>`).join('')
+      : `<p class="lembut kecil" style="text-align:center">Tiada nama sepadan.</p>`;
+  };
+  lukis();
+  document.getElementById('cari').oninput = (e) => lukis(e.target.value);
+  document.getElementById('keluar').onclick = logKeluar;
+
+  elSenarai.onclick = async (e) => {
+    const b = e.target.closest('button[data-id]');
+    if (!b) return;
+    const g = jadual.guru[b.dataset.id];
+    if (!confirm(`Sahkan: anda ialah ${namaCantik(g.nama)}?\n\nPilihan ini tidak boleh ditukar sendiri (hanya admin boleh).`)) return;
+    b.disabled = true;
+    try {
+      await tuntutNama(u, b.dataset.id);
+      location.replace(akar + 'guru/index.html');
+    } catch (err) {
+      console.error(err);
+      b.disabled = false;
+      alert('Gagal: ' + (err.code === 'permission-denied' ? 'Nama ini mungkin baru sahaja dituntut oleh akaun lain. Muat semula halaman.' : mesejRalat(err)));
+    }
+  };
+</script>
+</body>
+</html>

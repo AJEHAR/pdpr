@@ -1,0 +1,84 @@
+rules_version = '2';
+// ============================================================
+//  Peraturan keselamatan Firestore — Portal PDPR
+//  Firebase Console → Firestore Database → Rules → tampal → Publish
+//
+//  ⚠️ Tukar EMEL_SUPERADMIN di bawah kepada emel anda (huruf kecil),
+//     sama seperti SUPERADMIN_EMAIL dalam assets/js/config.js
+// ============================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function EMEL_SUPERADMIN() { return 'emel.anda@moe-dl.edu.my'; }
+
+    function masuk() { return request.auth != null; }
+    function emel() { return request.auth.token.email.lower(); }
+    function delima() {
+      return request.auth.token.email_verified == true
+        && emel().matches('.*@moe-dl[.]edu[.]my$');
+    }
+    function laluan(kol, id) { return /databases/$(database)/documents/$(kol)/$(id); }
+    function profil() { return get(laluan('users', request.auth.uid)).data; }
+    function lulus() {
+      return masuk() && exists(laluan('users', request.auth.uid)) && profil().status == 'lulus';
+    }
+    function admin() { return lulus() && profil().role in ['admin', 'superadmin']; }
+    function superadmin() { return lulus() && profil().role == 'superadmin'; }
+
+    // ---------- Data awam ----------
+    match /tetapan/{id}   { allow read: if true; allow write: if admin(); }
+    match /jadual/{id}    { allow read: if true; allow write: if admin(); }
+    match /pdprDays/{id}  { allow read: if true; allow write: if admin(); }
+
+    // ---------- Bahan PDPR ----------
+    match /uploads/{id} {
+      allow read: if true;                        // ibu bapa & murid boleh lihat
+      allow create: if lulus() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if lulus() && (resource.data.uid == request.auth.uid || admin());
+    }
+
+    // ---------- Daftar awal oleh admin (ID dokumen = emel huruf kecil) ----------
+    match /jemputan/{e} {
+      allow read: if admin() || (masuk() && emel() == e);
+      allow create, update: if admin() && request.resource.data.role in ['guru', 'admin'];
+      allow delete: if admin();
+    }
+
+    // ---------- Nama guru yang sudah dipautkan (elak 2 orang tuntut nama sama) ----------
+    match /tuntutan/{guruId} {
+      allow read: if masuk();
+      // create hanya berjaya jika dokumen BELUM wujud → nama unik
+      allow create: if admin() || (masuk() && request.resource.data.uid == request.auth.uid
+                                           && request.resource.data.email == emel());
+      allow update, delete: if admin();
+    }
+
+    // ---------- Akaun pengguna ----------
+    match /users/{uid} {
+      allow read: if masuk() && (request.auth.uid == uid || admin());
+
+      allow create: if masuk() && request.auth.uid == uid && request.resource.data.email == emel() && (
+        // 1. Superadmin
+        (emel() == EMEL_SUPERADMIN()
+          && request.resource.data.role == 'superadmin' && request.resource.data.status == 'lulus')
+        // 2. Didaftar awal oleh admin
+        || (exists(laluan('jemputan', emel()))
+          && request.resource.data.role == get(laluan('jemputan', emel())).data.role
+          && request.resource.data.guruId == get(laluan('jemputan', emel())).data.guruId
+          && request.resource.data.status == 'lulus')
+        // 3. Guru tuntut nama sendiri (DELiMa terus lulus; lain-lain menunggu)
+        || (request.resource.data.role == 'guru'
+          && request.resource.data.guruId is string
+          && getAfter(laluan('tuntutan', request.resource.data.guruId)).data.uid == request.auth.uid
+          && (request.resource.data.status == 'menunggu'
+              || (request.resource.data.status == 'lulus' && delima())))
+      );
+
+      // Admin urus guru & admin; hanya superadmin boleh sentuh akaun superadmin
+      allow update: if superadmin()
+        || (admin() && resource.data.role != 'superadmin'
+                    && request.resource.data.role in ['guru', 'admin']);
+      allow delete: if superadmin() || (admin() && resource.data.role != 'superadmin');
+    }
+  }
+}

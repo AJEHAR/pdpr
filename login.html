@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Log Masuk Guru · Portal PDPR</title>
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<main>
+  <div class="kad kotak-masuk">
+    <img class="jenama-besar" id="logo" src="assets/img/logo.svg" alt="">
+    <h1 style="font-size:1.5rem">Log Masuk Guru</h1>
+    <p class="lembut">Gunakan akaun <b>DELiMa</b> (@moe-dl.edu.my) atau <b>Gmail</b> anda.</p>
+    <div id="mesej"></div>
+    <button class="btn btn-google" id="masuk">
+      <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+      <span>Log masuk dengan Google</span>
+    </button>
+    <p class="bantuan" style="margin-top:16px">Akaun DELiMa diluluskan automatik. Akaun Gmail perlu diluluskan oleh admin sekolah.</p>
+  </div>
+</main>
+
+<script type="module">
+  import { pasangRangka, mesejRalat, akar } from './assets/js/ui.js';
+  import { penggunaSemasa, logMasuk, pastikanProfil, halamanUtama } from './assets/js/auth.js';
+  import { MOD_DEMO, tetapanCache } from './assets/js/data.js';
+
+  pasangRangka('login.html');
+  const t = tetapanCache();
+  if (t.logo) document.getElementById('logo').src = t.logo;
+
+  const ke = new URLSearchParams(location.search).get('ke');
+  const btn = document.getElementById('masuk');
+  const mesej = document.getElementById('mesej');
+  if (MOD_DEMO) btn.querySelector('span').textContent = 'Masuk sebagai guru (demo)';
+
+  async function teruskan(u) {
+    btn.disabled = true;
+    btn.querySelector('span').textContent = 'Menyemak akaun…';
+    const profil = await pastikanProfil(u);
+    if (!profil) return location.replace('daftar.html');
+    const sasaran = ke && /^(guru|admin)\/[\w-]+\.html/.test(ke) ? ke : halamanUtama(profil);
+    location.replace(akar + sasaran);
+  }
+
+  // Sudah log masuk? terus
+  const sedia = await penggunaSemasa();
+  if (sedia) await teruskan(sedia);
+
+  btn.onclick = async () => {
+    mesej.innerHTML = '';
+    try {
+      const u = await logMasuk();
+      if (u) await teruskan(u);
+    } catch (e) {
+      console.error(e);
+      btn.disabled = false;
+      mesej.innerHTML = `<div class="notis bahaya">${mesejRalat(e)}</div>`;
+    }
+  };
+</script>
+</body>
+</html>

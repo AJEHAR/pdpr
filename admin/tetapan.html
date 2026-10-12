@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tetapan · Portal PDPR</title>
+  <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main>
+  <div class="kepala">
+    <div>
+      <h1>Tetapan</h1>
+      <p class="lembut">Maklumat sekolah, logo dan sambungan Google Drive.</p>
+    </div>
+  </div>
+
+  <form id="borang" class="upload-grid">
+    <section>
+      <div class="kad">
+        <h2>Maklumat sekolah</h2>
+        <div class="medan"><label for="nama">Nama sekolah</label><input type="text" id="nama" required placeholder="cth Sekolah Kebangsaan …"></div>
+        <div class="baris-medan">
+          <div class="medan"><label for="ringkas">Nama ringkas portal</label><input type="text" id="ringkas" maxlength="20" placeholder="cth PDPR SKPK"></div>
+          <div class="medan"><label for="kod">Kod sekolah</label><input type="text" id="kod" maxlength="12" placeholder="cth CBA1234"></div>
+        </div>
+      </div>
+      <div class="kad">
+        <h2>Logo sekolah</h2>
+        <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">
+          <img class="pratonton-logo" id="pratonton" src="../assets/img/logo.svg" alt="Logo">
+          <div>
+            <div class="butang-baris" style="margin-top:0">
+              <label class="btn kedua" style="margin:0">Pilih gambar<input type="file" id="in-logo" accept="image/*" hidden></label>
+              <button type="button" class="btn bahaya" id="buang-logo">Buang</button>
+            </div>
+            <p class="bantuan">PNG lutsinar paling cantik. Gambar dikecilkan automatik ke 256px.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="kad">
+        <h2>Google Drive (Apps Script)</h2>
+        <div class="medan">
+          <label for="url">URL Web App Apps Script</label>
+          <input type="url" id="url" placeholder="https://script.google.com/macros/s/…/exec">
+          <p class="bantuan">Lihat panduan dalam README, bahagian "Sediakan Apps Script".</p>
+        </div>
+        <div class="butang-baris" style="margin-top:0"><button type="button" class="btn kedua kecil" id="uji">Uji sambungan</button></div>
+        <div id="hasil-uji" style="margin-top:10px"></div>
+        <div class="medan" style="margin-top:14px"><label for="had">Had saiz fail (MB)</label><input type="number" id="had" min="1" max="25" step="1"></div>
+      </div>
+      <div class="kad">
+        <h2>Jadual waktu</h2>
+        <div id="info-jadual" class="kecil"></div>
+      </div>
+      <div class="melekit-bawah"><button class="btn penuh" id="simpan">Simpan tetapan</button></div>
+    </section>
+  </form>
+</main>
+
+<script type="module">
+  import { kawal } from '../assets/js/auth.js';
+  import { pasangApp, esc, toast, mesejRalat } from '../assets/js/ui.js';
+  import { muatTetapan, simpanTetapan, muatJadual, MOD_DEMO } from '../assets/js/data.js';
+  import { ujiAppsScript } from '../assets/js/upload.js';
+
+  const sesiAuth = await kawal('admin');
+  await pasangApp('admin/tetapan.html', sesiAuth);
+
+  const $ = (id) => document.getElementById(id);
+  const [t, jadual] = await Promise.all([muatTetapan(), muatJadual()]);
+  let logo = t.logo || '';
+  $('nama').value = t.nama === 'Nama Sekolah' ? '' : t.nama;
+  $('ringkas').value = t.ringkas;
+  $('kod').value = t.kod;
+  $('url').value = t.appsScriptUrl;
+  $('had').value = t.hadSaizMB;
+  if (logo) $('pratonton').src = logo;
+
+  $('info-jadual').innerHTML = `
+    <p style="margin:0 0 6px">Sumber: <b>${esc(jadual.sumber || 'aSc')}</b> · dijana ${esc((jadual.dijana || '').slice(0, 10))}</p>
+    <p class="lembut" style="margin:0">${Object.keys(jadual.kelas).length} kelas · ${Object.keys(jadual.guru).length} guru · ${jadual.slot.length} slot seminggu</p>
+    <p class="bantuan">Import jadual baharu dan jadual prasekolah akan tersedia dalam Fasa 3.</p>`;
+
+  // Kecilkan logo → dataURL (disimpan terus dalam Firestore)
+  $('in-logo').onchange = async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    try {
+      const bmp = await createImageBitmap(f);
+      const n = Math.min(1, 256 / Math.max(bmp.width, bmp.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(bmp.width * n); c.height = Math.round(bmp.height * n);
+      c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+      logo = c.toDataURL('image/png');
+      if (logo.length > 180_000) logo = c.toDataURL('image/webp', 0.9);
+      $('pratonton').src = logo;
+    } catch { toast('Gambar tidak dapat dibaca', 'ralat'); }
+  };
+  $('buang-logo').onclick = () => { logo = ''; $('pratonton').src = '../assets/img/logo.svg'; };
+
+  $('uji').onclick = async () => {
+    const url = $('url').value.trim();
+    if (!url) return toast('Masukkan URL dahulu', 'ralat');
+    $('hasil-uji').innerHTML = '<span class="lembut kecil">Menguji…</span>';
+    try {
+      const r = await ujiAppsScript(url);
+      $('hasil-uji').innerHTML = r.ok
+        ? `<div class="notis info" style="margin:0">✓ Bersambung. Folder Drive: <b>${esc(r.folder || '-')}</b></div>`
+        : `<div class="notis bahaya" style="margin:0">${esc(r.ralat || 'Respons tidak dijangka')}</div>`;
+    } catch (e) {
+      $('hasil-uji').innerHTML = `<div class="notis bahaya" style="margin:0">Gagal disambung. Pastikan Web App di-deploy dengan akses "Anyone".</div>`;
+    }
+  };
+
+  $('borang').onsubmit = async (e) => {
+    e.preventDefault();
+    $('simpan').disabled = true;
+    try {
+      await simpanTetapan({
+        nama: $('nama').value.trim() || 'Nama Sekolah',
+        ringkas: $('ringkas').value.trim() || 'PDPR',
+        kod: $('kod').value.trim(),
+        logo,
+        appsScriptUrl: $('url').value.trim(),
+        hadSaizMB: Math.max(1, Math.min(25, +$('had').value || 10)),
+      });
+      toast(MOD_DEMO ? 'Disimpan (mod demo: dalam browser ini sahaja)' : 'Tetapan disimpan');
+      setTimeout(() => location.reload(), 700);
+    } catch (err) {
+      toast(mesejRalat(err), 'ralat');
+      $('simpan').disabled = false;
+    }
+  };
+</script>
+</body>
+</html>
