@@ -17,6 +17,7 @@
   import { pasangRangka, esc, namaCantik, mesejRalat, akar } from './assets/js/ui.js';
   import { penggunaSemasa, pastikanProfil, namaDituntut, tuntutNama, emelDelima, logKeluar } from './assets/js/auth.js';
   import { muatJadual, MOD_DEMO } from './assets/js/data.js';
+  import { gabungKamus } from './assets/js/jadual.js';
 
   pasangRangka('login.html');
   const kotak = document.getElementById('kotak');
@@ -26,7 +27,9 @@
   const sedia = await pastikanProfil(u);
   if (sedia) { location.replace(akar + (sedia.guruId ? 'guru/index.html' : 'admin/index.html')); await new Promise(() => {}); }
 
-  const [jadual, dituntut] = await Promise.all([muatJadual(), namaDituntut()]);
+  // Guru dari jadual semasa + versi akan datang (guru baharu boleh mendaftar lebih awal)
+  const [jSemasa, jTerkini, dituntut] = await Promise.all([muatJadual(), muatJadual('9999-12-31'), namaDituntut()]);
+  const jadual = gabungKamus([jSemasa, jTerkini]);
   const guru = Object.entries(jadual.guru)
     .filter(([id]) => !dituntut.has(id))
     .sort((a, b) => a[1].nama.localeCompare(b[1].nama, 'ms'));

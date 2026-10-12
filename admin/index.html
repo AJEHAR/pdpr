@@ -36,7 +36,7 @@
   const $ = (id) => document.getElementById(id);
   $('sebelum').innerHTML = ikon('kiri', 18);
   $('selepas').innerHTML = ikon('kanan', 18);
-  const jadual = await muatJadual();
+  let jadual = await muatJadual(); // ditukar kepada versi ikut tarikh dalam muat()
   const p = new URLSearchParams(location.search);
   $('tarikh').value = /^\d{4}-\d{2}-\d{2}$/.test(p.get('t') || '') ? p.get('t') : hariBekerja(hariIni(), -1);
   let paparan = 'guru';
@@ -56,7 +56,8 @@
     const h = indeksHari(t);
     if (h < 0) { $('statistik').innerHTML = ''; $('isi').innerHTML = `<div class="kosong"><div class="ikon">🌤️</div><p>Hujung minggu.</p></div>`; return; }
 
-    const [status, bahan] = await Promise.all([statusPdpr(t), bahanTarikh(t)]);
+    const [status, bahan, jd] = await Promise.all([statusPdpr(t), bahanTarikh(t), muatJadual(t)]);
+    jadual = jd;
     if (!status.aktif) {
       $('statistik').innerHTML = '';
       $('isi').innerHTML = `<div class="kosong"><div class="ikon">🏫</div><p><b>Bukan hari PDPR.</b><br>Tandakan tarikh ini sebagai hari PDPR di <a href="kalendar.html?t=${t}">Kalendar PDPR</a>.</p></div>`;

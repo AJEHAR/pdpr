@@ -4,7 +4,7 @@
 //
 //  Koleksi Firestore:
 //    tetapan/sekolah        { nama, ringkas, kod, logo(dataURL), appsScriptUrl, hadSaizMB }
-//    jadual/semasa          jadual aktif (lihat jadual.js)
+//    jadual/indeks, jadual/{versi}  jadual berversi ikut tarikh berkuat kuasa
 //    pdprDays/{YYYY-MM-DD}  { aktif, kelas:'semua'|[kelasId], catatan }
 //    uploads/{id}           { tarikh, sesi[], kelasIds[], subjekIds[], guruIds[], guruId,
 //                             uid, olehGuruId, olehNama, bagiPihak, jenis:'fail'|'pautan',
@@ -15,6 +15,7 @@
 //    tuntutan/{guruId}      { uid?, email }                      ← nama guru yang sudah dipautkan
 // ============================================================
 import { firebase, MOD_DEMO } from './firebase.js';
+import { ZON_MASA } from './config.js';
 import { indeksHari } from './jadual.js';
 
 export { MOD_DEMO };
@@ -121,20 +122,109 @@ export async function simpanTetapan(data) {
 }
 
 // ------------------------------------------------------------
-//  Jadual
+//  Jadual — BERVERSI mengikut tarikh berkuat kuasa
+//    jadual/indeks   { versi: [{ id, mulai:'YYYY-MM-DD', nama, fail, kelas, guru, slot, masa, oleh }] }
+//    jadual/{id}     data jadual penuh (lihat jadual.js)
+//  Tarikh T menggunakan versi dengan `mulai` terbesar ≤ T.
+//  Jika tiada indeks lagi → data/jadual.json (jadual asal dalam repo).
 // ------------------------------------------------------------
-const KUNCI_JADUAL = 'pdpr-jadual-v1';
+const PRA_CACHE = 'pdpr-jv:';
+const KUNCI_INDEKS = 'pdpr-jadual-indeks';
+const TEMPOH_INDEKS = 10 * 60 * 1000; // 10 minit
 
-/** Jadual aktif: Firestore jadual/semasa, atau data/jadual.json sebagai sandaran. */
-export async function muatJadual() {
-  try { const c = sessionStorage.getItem(KUNCI_JADUAL); if (c) return JSON.parse(c); } catch {}
-  let jadual = null;
-  if (!MOD_DEMO) {
-    try { jadual = await ambil('jadual', 'semasa'); } catch (e) { console.warn('Guna jadual tempatan', e); }
+const tarikhKini = () => new Date().toLocaleDateString('en-CA', { timeZone: ZON_MASA });
+
+export function bersihCacheJadual() {
+  try {
+    Object.keys(sessionStorage).filter((k) => k.startsWith(PRA_CACHE) || k === KUNCI_INDEKS).forEach((k) => sessionStorage.removeItem(k));
+  } catch {}
+}
+
+export async function indeksJadual(segar = false) {
+  if (!segar) {
+    try {
+      const c = JSON.parse(sessionStorage.getItem(KUNCI_INDEKS) || 'null');
+      if (c && Date.now() - c.t < TEMPOH_INDEKS) return c.d;
+    } catch {}
   }
-  if (!jadual) jadual = await (await fetch(new URL('../../data/jadual.json', import.meta.url))).json();
-  try { sessionStorage.setItem(KUNCI_JADUAL, JSON.stringify(jadual)); } catch {}
-  return jadual;
+  let d = null;
+  try { d = await ambil('jadual', 'indeks'); } catch (e) { console.warn('Gagal baca indeks jadual', e); }
+  const hasil = d?.versi?.length ? { versi: [...d.versi].sort((a, b) => a.mulai.localeCompare(b.mulai)) } : { versi: [] };
+  try { sessionStorage.setItem(KUNCI_INDEKS, JSON.stringify({ t: Date.now(), d: hasil })); } catch {}
+  return hasil;
+}
+
+/** Versi yang berkuat kuasa pada tarikh (null jika tiada indeks) */
+export function pilihVersi(indeks, tarikh) {
+  if (!indeks?.versi?.length) return null;
+  let p = null;
+  for (const v of indeks.versi) if (v.mulai <= tarikh) p = v;
+  return p || indeks.versi[0];
+}
+
+export async function muatVersiJadual(id) {
+  const kunci = PRA_CACHE + id;
+  try { const c = sessionStorage.getItem(kunci); if (c) return JSON.parse(c); } catch {}
+  let j;
+  if (id === 'fail-asal') {
+    j = await (await fetch(new URL('../../data/jadual.json', import.meta.url))).json();
+  } else {
+    j = await ambil('jadual', id);
+    if (!j) throw new Error('Versi jadual tidak dijumpai: ' + id);
+    delete j.id;
+  }
+  try { sessionStorage.setItem(kunci, JSON.stringify(j)); } catch {}
+  return j;
+}
+
+/** Jadual yang berkuat kuasa pada tarikh (lalai: hari ini) */
+export async function muatJadual(tarikh = tarikhKini()) {
+  const v = pilihVersi(await indeksJadual(), tarikh);
+  return muatVersiJadual(v ? v.id : 'fail-asal');
+}
+
+/** { tarikh: jadual } bagi beberapa tarikh (versi sama dimuat sekali sahaja) */
+export async function muatJadualUntuk(senaraiTarikh) {
+  const ind = await indeksJadual();
+  const ids = Object.fromEntries(senaraiTarikh.map((t) => [t, pilihVersi(ind, t)?.id || 'fail-asal']));
+  const unik = [...new Set(Object.values(ids))];
+  const dimuat = Object.fromEntries(await Promise.all(unik.map(async (id) => [id, await muatVersiJadual(id)])));
+  return Object.fromEntries(senaraiTarikh.map((t) => [t, dimuat[ids[t]]]));
+}
+
+/**
+ * Simpan versi jadual baharu. Jika tiada indeks lagi, jadual asal (data/jadual.json)
+ * didaftarkan dahulu sebagai versi pertama supaya tarikh lama kekal menggunakannya.
+ */
+export async function simpanVersiJadual(jadual, meta) {
+  const ind = await indeksJadual(true);
+  let versi = [...ind.versi];
+  const ops = [];
+  if (!versi.length) {
+    const asal = await muatVersiJadual('fail-asal');
+    ops.push({ kol: 'jadual', id: 'v-asal', data: asal });
+    versi.push({ id: 'v-asal', mulai: '2000-01-01', nama: 'Jadual asal', fail: 'data/jadual.json',
+      kelas: Object.keys(asal.kelas).length, guru: Object.keys(asal.guru).length, slot: asal.slot.length, masa: new Date().toISOString(), oleh: meta.oleh });
+  }
+  const id = 'v-' + meta.mulai;
+  versi = versi.filter((v) => v.id !== id);
+  versi.push({ id, mulai: meta.mulai, nama: meta.nama || '', fail: meta.fail || '',
+    kelas: Object.keys(jadual.kelas).length, guru: Object.keys(jadual.guru).length, slot: jadual.slot.length,
+    masa: new Date().toISOString(), oleh: meta.oleh });
+  versi.sort((a, b) => a.mulai.localeCompare(b.mulai));
+  ops.push({ kol: 'jadual', id, data: jadual });
+  ops.push({ kol: 'jadual', id: 'indeks', data: { versi } });
+  await kelompok(ops);
+  bersihCacheJadual();
+  return id;
+}
+
+export async function padamVersiJadual(id) {
+  const ind = await indeksJadual(true);
+  const versi = ind.versi.filter((v) => v.id !== id);
+  if (!versi.length) throw new Error('Tidak boleh memadam satu-satunya versi jadual.');
+  await kelompok([{ kol: 'jadual', id, padam: true }, { kol: 'jadual', id: 'indeks', data: { versi } }]);
+  bersihCacheJadual();
 }
 
 // ------------------------------------------------------------

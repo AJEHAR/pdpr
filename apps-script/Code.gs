@@ -6,21 +6,39 @@
  * ============================================================
  */
 
-// ⚠️ ISI FOLDER_INDUK_ID (2 nilai lain sudah diisi)
+// Semua nilai sudah diisi. Tiada apa perlu diubah.
 const FIREBASE_API_KEY = 'AIzaSyC4it7TLf7gcU58lNqjPIgfBtxEyfpasK8';
 const FIREBASE_PROJECT_ID = 'pdpr-90934';
-const FOLDER_INDUK_ID = 'TAMPAL_ID_FOLDER_DRIVE'; // ID folder "PDPR" (bahagian akhir URL folder)
+const NAMA_FOLDER_INDUK = 'PDPR'; // dicipta automatik dalam My Drive akaun yang menjalankan skrip
 
 const HAD_MB = 25; // had keselamatan pelayan (had sebenar ditetapkan di Admin → Tetapan)
 
 /** GET — untuk butang "Uji sambungan" */
 function doGet() {
   try {
-    const f = DriveApp.getFolderById(FOLDER_INDUK_ID);
-    return jawab({ ok: true, folder: f.getName(), masa: new Date().toISOString() });
+    const f = folderInduk();
+    return jawab({ ok: true, folder: f.getName(), url: f.getUrl(), masa: new Date().toISOString() });
   } catch (e) {
-    return jawab({ ok: false, ralat: 'Folder Drive tidak dijumpai. Semak FOLDER_INDUK_ID.' });
+    return jawab({ ok: false, ralat: 'Gagal akses Google Drive: ' + e.message });
   }
+}
+
+/**
+ * Folder induk "PDPR". Dicipta automatik pada kali pertama, dan ID-nya disimpan
+ * dalam Script Properties. Jika folder dipadam/ke Trash, folder baharu dicipta semula.
+ */
+function folderInduk() {
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty('FOLDER_INDUK_ID');
+  if (id) {
+    try {
+      const f = DriveApp.getFolderById(id);
+      if (!f.isTrashed()) return f;
+    } catch (e) { /* folder hilang → cipta semula */ }
+  }
+  const f = DriveApp.getRootFolder().createFolder(NAMA_FOLDER_INDUK);
+  props.setProperty('FOLDER_INDUK_ID', f.getId());
+  return f;
 }
 
 /** POST — { aksi: 'simpan' | 'padam', token, ... } */
@@ -106,7 +124,7 @@ function dapatFolder(laluan) {
   const kunci = LockService.getScriptLock();
   kunci.waitLock(20000);
   try {
-    let f = DriveApp.getFolderById(FOLDER_INDUK_ID);
+    let f = folderInduk();
     for (const nama of laluan) {
       const ada = f.getFoldersByName(nama);
       f = ada.hasNext() ? ada.next() : f.createFolder(nama);
@@ -125,8 +143,12 @@ function jawab(o) {
   return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
 }
 
-/** Jalankan sekali dari editor untuk memberi kebenaran (Drive + UrlFetch) */
-function ujiKebenaran() {
-  Logger.log(DriveApp.getFolderById(FOLDER_INDUK_ID).getName());
-  Logger.log(UrlFetchApp.fetch('https://www.google.com').getResponseCode());
+/**
+ * ▶️ JALANKAN SEKALI dari editor: beri kebenaran (Drive + UrlFetch)
+ * dan cipta folder PDPR. Pautan folder dipaparkan dalam Execution log.
+ */
+function sediakan() {
+  const f = folderInduk();
+  UrlFetchApp.fetch('https://www.google.com');
+  Logger.log('✅ Siap! Folder PDPR: ' + f.getUrl());
 }

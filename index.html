@@ -39,7 +39,7 @@
   const elSenarai = document.getElementById('senarai');
 
   try {
-    const [jadual, status, bahan] = await Promise.all([muatJadual(), statusPdpr(sasaran), bahanTarikh(sasaran)]);
+    const [jadual, status, bahan] = await Promise.all([muatJadual(sasaran), statusPdpr(sasaran), bahanTarikh(sasaran)]);
     const label = sasaran === kini ? 'Hari ini' : 'Hari persekolahan seterusnya';
 
     elStatus.innerHTML = `

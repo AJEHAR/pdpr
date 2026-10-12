@@ -86,10 +86,10 @@
 
     const saya = ++giliran;
     elHasil.innerHTML = `<p class="memuat">Memuatkan…</p>`;
-    const [status, bahan] = await Promise.all([statusPdpr(tarikh), bahanKelas(tarikh, kelasId)]);
+    const [status, bahan, jd] = await Promise.all([statusPdpr(tarikh), bahanKelas(tarikh, kelasId), muatJadual(tarikh)]);
     if (saya !== giliran) return;
 
-    const sesi = sesiHari(jadual, h, { kelasId });
+    const sesi = sesiHari(jd, h, { kelasId }); // jadual yang berkuat kuasa pada tarikh itu
     const terlibat = kelasTerlibat(status, kelasId);
     const bahanSesi = (id) => bahan.filter((b) => (b.sesi || []).includes(id));
     const bahanHarian = bahan.filter((b) => !b.sesi || !b.sesi.length || b.sesi.includes('harian'));
@@ -120,8 +120,8 @@
       html += `<div class="senarai-sesi">` + sesi.map((s) => {
         let pemisah = '';
         if (!lepasRehat && s.mula >= '10:30') { lepasRehat = true; pemisah = `<div class="rehat">— REHAT —</div>`; }
-        const sub = jadual.subjek[s.subjek] || { nama: '?' };
-        const guru = s.guru.map((g) => namaCantik(jadual.guru[g]?.nama || '?')).join(', ');
+        const sub = jd.subjek[s.subjek] || { nama: '?' };
+        const guru = s.guru.map((g) => namaCantik(jd.guru[g]?.nama || '?')).join(', ');
         const b = bahanSesi(s.id);
         return pemisah + `
           <article class="sesi ${b.length ? 'ada' : ''}">

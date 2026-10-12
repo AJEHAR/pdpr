@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jadual Waktu · Portal PDPR</title>
+  <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main>
+  <div class="kepala">
+    <div>
+      <h1>Jadual Waktu</h1>
+      <p class="lembut">Import jadual baharu dari aSc Timetables. Setiap versi mempunyai tarikh berkuat kuasa, jadi rekod lama tidak terganggu.</p>
+    </div>
+  </div>
+
+  <div class="upload-grid">
+    <section class="kad">
+      <div class="langkah"><span class="no">1</span><h2>Pilih fail XML</h2></div>
+      <p class="bantuan" style="margin-top:0">Dalam aSc: <b>File → Export → aSc Timetables 2012 XML</b>.</p>
+      <div class="zon-lepas" id="zon">
+        <div>Seret fail .xml ke sini, atau</div>
+        <div class="butang-baris"><label class="btn kedua" style="margin:0">Pilih fail XML<input type="file" id="in-xml" accept=".xml,text/xml" hidden></label></div>
+      </div>
+      <div id="info-fail" style="margin-top:12px"></div>
+
+      <div class="langkah" style="margin-top:20px"><span class="no">2</span><h2>Butiran versi</h2></div>
+      <div class="baris-medan">
+        <div class="medan"><label for="mulai">Berkuat kuasa mulai</label><input type="date" id="mulai"></div>
+        <div class="medan"><label for="nama">Nama versi</label><input type="text" id="nama" placeholder="cth Jadual Semester 2"></div>
+      </div>
+      <div id="amaran-tarikh"></div>
+    </section>
+
+    <section>
+      <div class="kad" id="pratonton">
+        <div class="langkah"><span class="no">3</span><h2>Semak perubahan</h2></div>
+        <p class="lembut">Pilih fail XML untuk melihat perbezaan berbanding jadual semasa.</p>
+      </div>
+      <div class="melekit-bawah"><button class="btn penuh" id="simpan" disabled>Simpan jadual baharu</button></div>
+    </section>
+  </div>
+
+  <div class="seksyen-tajuk"><h2>Versi jadual</h2></div>
+  <div id="versi"><p class="memuat">Memuatkan…</p></div>
+</main>
+
+<script type="module">
+  import { kawal } from '../assets/js/auth.js';
+  import { pasangApp, esc, namaCantik, hariIni, hariBekerja, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
+  import { indeksJadual, pilihVersi, muatJadual, simpanVersiJadual, padamVersiJadual, senarai, MOD_DEMO } from '../assets/js/data.js';
+  import { parseAscXml, stabilkanId } from '../assets/js/jadual.js';
+
+  const sesiAuth = await kawal('admin');
+  await pasangApp('admin/jadual.html', sesiAuth);
+  const { u } = sesiAuth;
+
+  const $ = (id) => document.getElementById(id);
+  const kini = hariIni();
+  $('mulai').value = hariBekerja(kini, 1);
+
+  let baru = null, failNama = '', hasil = null;
+
+  // ---------- Senarai versi ----------
+  async function lukisVersi() {
+    const ind = await indeksJadual(true);
+    if (!ind.versi.length) {
+      const j = await muatJadual();
+      $('versi').innerHTML = `<div class="kad"><p style="margin:0">Belum ada jadual diimport. Sistem menggunakan <b>jadual asal</b> dalam repo
+        (${Object.keys(j.kelas).length} kelas · ${Object.keys(j.guru).length} guru · ${j.slot.length} slot).</p>
+        <p class="bantuan">Apabila anda mengimport jadual pertama, jadual asal ini disimpan sebagai versi lama secara automatik.</p></div>`;
+      return;
+    }
+    const aktif = pilihVersi(ind, kini);
+    const susun = [...ind.versi].reverse();
+    $('versi').innerHTML = `<div class="balut-jadual"><table class="jadual-data jadual-kad">
+      <thead><tr><th>Mulai</th><th>Nama</th><th>Isi</th><th>Status</th><th></th></tr></thead>
+      <tbody>${susun.map((v) => {
+        const st = v.id === aktif?.id ? '<span class="lencana">Aktif hari ini</span>'
+          : v.mulai > kini ? '<span class="lencana amaran">Akan datang</span>' : '<span class="lencana tiada">Lama</span>';
+        return `<tr>
+          <td><b>${v.mulai === '2000-01-01' ? 'Asal' : esc(formatTarikh(v.mulai, 'pendek'))}</b></td>
+          <td data-label="Nama">${esc(v.nama || '—')}${v.fail ? `<div class="kecil lembut">${esc(v.fail)}</div>` : ''}</td>
+          <td data-label="Isi" class="kecil">${v.kelas} kelas · ${v.guru} guru · ${v.slot} slot</td>
+          <td data-label="Status">${st}</td>
+          <td style="text-align:right">${ind.versi.length > 1 ? `<button class="btn bahaya kecil" data-padam="${esc(v.id)}">Padam</button>` : ''}</td>
+        </tr>`;
+      }).join('')}</tbody></table></div>`;
+  }
+
+  $('versi').onclick = async (e) => {
+    const b = e.target.closest('[data-padam]');
+    if (!b) return;
+    if (!confirm('Padam versi jadual ini? Tarikh dalam tempoh versi ini akan menggunakan versi sebelumnya.')) return;
+    try { await padamVersiJadual(b.dataset.padam); toast('Versi dipadam'); lukisVersi(); }
+    catch (err) { toast(mesejRalat(err), 'ralat'); }
+  };
+
+  // ---------- Baca fail XML ----------
+  async function bacaFail(f) {
+    $('info-fail').innerHTML = '<p class="lembut kecil">Membaca fail…</p>';
+    try {
+      const buf = await f.arrayBuffer();
+      const kepala = new TextDecoder('ascii').decode(buf.slice(0, 200));
+      const enc = (kepala.match(/encoding="([^"]+)"/i) || [])[1] || 'utf-8';
+      let teks;
+      try { teks = new TextDecoder(enc).decode(buf); } catch { teks = new TextDecoder('windows-1252').decode(buf); }
+      const doc = new DOMParser().parseFromString(teks, 'text/xml');
+      if (doc.getElementsByTagName('parsererror').length) throw new Error('Fail XML rosak atau tidak lengkap.');
+      if (!doc.getElementsByTagName('timetable').length) throw new Error('Ini bukan fail eksport aSc Timetables.');
+      const j = parseAscXml(doc);
+      if (!j.slot.length) throw new Error('Tiada slot jadual dijumpai. Pastikan jadual sudah dijana dalam aSc sebelum dieksport.');
+      j.sumber = 'aSc Timetables · ' + f.name;
+      baru = j;
+      failNama = f.name;
+      if (!$('nama').value) $('nama').value = f.name.replace(/\.xml$/i, '');
+      $('info-fail').innerHTML = `<div class="fail-item siap"><span class="n">${esc(f.name)}</span>
+        <span class="s">${Object.keys(j.kelas).length} kelas · ${Object.keys(j.guru).length} guru · ${j.slot.length} slot</span></div>`;
+      await banding();
+    } catch (e) {
+      console.error(e);
+      baru = null;
+      $('info-fail').innerHTML = `<div class="notis bahaya">${esc(e.message)}</div>`;
+      $('simpan').disabled = true;
+    }
+  }
+
+  // ---------- Bandingan ----------
+  async function banding() {
+    const mulai = $('mulai').value;
+    $('amaran-tarikh').innerHTML = mulai && mulai < kini
+      ? `<div class="notis amaran">Tarikh mulai sudah lepas. Papan pemuka dan laporan bagi tarikh ${esc(formatTarikh(mulai, 'pendek'))} dan seterusnya akan dikira dengan jadual baharu.</div>` : '';
+    if (!baru || !mulai) return;
+
+    const lama = await muatJadual(mulai);
+    hasil = stabilkanId(baru, lama);
+    const L = hasil.laporan;
+
+    let terjejas = [];
+    if (L.guru.hilang.length) {
+      try { terjejas = (await senarai('users')).filter((x) => L.guru.hilang.includes(x.guruId)); } catch {}
+    }
+
+    const senaraiNama = (ids, kamus, kol) => ids.length
+      ? `<ul style="margin:6px 0 0;padding-left:20px" class="kecil">${ids.map((id) => `<li>${esc(kol === 'guru' ? `${kamus[id]?.ringkas} · ${namaCantik(kamus[id]?.nama)}` : kamus[id]?.nama)}</li>`).join('')}</ul>` : '';
+    const baris = (label, nL, nB) => `<tr><td>${label}</td><td>${nL}</td><td><b>${nB}</b></td><td>${nB - nL > 0 ? '+' : ''}${nB - nL || ''}</td></tr>`;
+    const kira = (o) => Object.keys(o || {}).length;
+
+    $('pratonton').innerHTML = `
+      <div class="langkah"><span class="no">3</span><h2>Semak perubahan</h2></div>
+      <div class="balut-jadual" style="margin-bottom:14px"><table class="jadual-data">
+        <thead><tr><th></th><th>Semasa</th><th>Baharu</th><th>Beza</th></tr></thead>
+        <tbody>${baris('Kelas', kira(lama.kelas), kira(hasil.jadual.kelas))}${baris('Guru', kira(lama.guru), kira(hasil.jadual.guru))}
+          ${baris('Subjek', kira(lama.subjek), kira(hasil.jadual.subjek))}${baris('Slot seminggu', L.slot.lama, L.slot.baharu)}</tbody>
+      </table></div>
+      <p class="kecil">✅ <b>${L.guru.sama}</b> guru dan <b>${L.kelas.sama}</b> kelas dipadankan dengan jadual semasa. Akaun guru kekal terpaut.</p>
+      ${L.guru.baharu.length ? `<div class="notis info"><b>Guru baharu (${L.guru.baharu.length})</b>${senaraiNama(L.guru.baharu, hasil.jadual.guru, 'guru')}</div>` : ''}
+      ${L.guru.hilang.length ? `<div class="notis amaran"><b>Guru tiada dalam jadual baharu (${L.guru.hilang.length})</b>${senaraiNama(L.guru.hilang, lama.guru, 'guru')}
+        <div class="kecil" style="margin-top:6px">Jika guru ini cuma bertukar nama dalam aSc, pautkan semula akaunnya di <a href="pengguna.html?tab=pengguna">Pengguna</a> selepas menyimpan.</div></div>` : ''}
+      ${terjejas.length ? `<div class="notis bahaya"><b>${terjejas.length} akaun</b> dipautkan kepada guru yang tiada lagi: ${terjejas.map((x) => esc(x.email)).join(', ')}</div>` : ''}
+      ${L.kelas.baharu.length ? `<div class="notis info"><b>Kelas baharu</b>${senaraiNama(L.kelas.baharu, hasil.jadual.kelas)}</div>` : ''}
+      ${L.kelas.hilang.length ? `<div class="notis amaran"><b>Kelas tiada lagi</b>${senaraiNama(L.kelas.hilang, lama.kelas)}</div>` : ''}
+      ${L.subjek.baharu.length ? `<p class="kecil lembut">Subjek baharu: ${L.subjek.baharu.map((id) => esc(hasil.jadual.subjek[id]?.nama)).join(', ')}</p>` : ''}
+      ${baru.amaran?.length ? `<p class="kecil lembut">Amaran fail: ${esc(baru.amaran.slice(0, 3).join('; '))}</p>` : ''}
+      <p class="bantuan">Jadual baharu berkuat kuasa mulai <b>${esc(formatTarikh(mulai))}</b>. Tarikh sebelumnya kekal menggunakan jadual lama.</p>`;
+    $('simpan').disabled = false;
+  }
+
+  $('in-xml').onchange = (e) => e.target.files[0] && bacaFail(e.target.files[0]);
+  const zon = $('zon');
+  zon.ondragover = (e) => { e.preventDefault(); zon.classList.add('atas'); };
+  zon.ondragleave = () => zon.classList.remove('atas');
+  zon.ondrop = (e) => { e.preventDefault(); zon.classList.remove('atas'); e.dataTransfer.files[0] && bacaFail(e.dataTransfer.files[0]); };
+  $('mulai').onchange = banding;
+
+  $('simpan').onclick = async () => {
+    const mulai = $('mulai').value;
+    if (!hasil || !mulai) return;
+    const ind = await indeksJadual(true);
+    if (ind.versi.some((v) => v.mulai === mulai) && !confirm('Sudah ada versi bermula pada tarikh ini. Gantikan?')) return;
+    $('simpan').disabled = true;
+    try {
+      await simpanVersiJadual(hasil.jadual, { mulai, nama: $('nama').value.trim(), fail: failNama, oleh: u.email });
+      toast(MOD_DEMO ? 'Disimpan (mod demo)' : 'Jadual baharu disimpan');
+      baru = null; hasil = null;
+      $('in-xml').value = ''; $('info-fail').innerHTML = ''; $('nama').value = '';
+      $('pratonton').innerHTML = `<div class="langkah"><span class="no">3</span><h2>Semak perubahan</h2></div><div class="notis info">✓ Disimpan. Semua halaman kini menggunakan jadual baharu untuk tarikh ${esc(formatTarikh(mulai, 'pendek'))} dan seterusnya.</div>`;
+      lukisVersi();
+    } catch (err) {
+      console.error(err);
+      toast(mesejRalat(err), 'ralat');
+      $('simpan').disabled = false;
+    }
+  };
+
+  lukisVersi();
+</script>
+</body>
+</html>

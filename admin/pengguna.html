@@ -22,6 +22,7 @@
   import { kawal } from '../assets/js/auth.js';
   import { pasangApp, esc, namaCantik, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
   import { muatJadual, senarai, tulis, buang, kelompok } from '../assets/js/data.js';
+  import { gabungKamus } from '../assets/js/jadual.js';
 
   const sesiAuth = await kawal('admin');
   await pasangApp('admin/pengguna.html', sesiAuth);
@@ -29,7 +30,7 @@
   const superadmin = profilSaya.role === 'superadmin';
 
   const $ = (id) => document.getElementById(id);
-  const jadual = await muatJadual();
+  const jadual = gabungKamus(await Promise.all([muatJadual(), muatJadual('9999-12-31')])); // semasa + akan datang
   const guruSusun = Object.entries(jadual.guru).sort((a, b) => a[1].nama.localeCompare(b[1].nama, 'ms'));
   const namaGuru = (id) => (id ? namaCantik(jadual.guru[id]?.nama || '(tiada dalam jadual)') : '— Bukan guru —');
   const PERANAN = { guru: 'Guru', admin: 'Admin', superadmin: 'Superadmin' };

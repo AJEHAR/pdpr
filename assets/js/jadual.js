@@ -146,6 +146,67 @@ export function sesiHari(jadual, h, tapis = {}) {
     .sort((a, b) => a.waktu[0] - b.waktu[0] || a.kelas.localeCompare(b.kelas));
 }
 
+/**
+ * Kekalkan ID guru/kelas/subjek daripada jadual LAMA apabila jadual BAHARU diimport.
+ * aSc kadang-kadang menjana ID baharu setiap kali eksport; tanpa ini akaun guru
+ * dan rekod lama akan "terputus". Padanan: nama penuh dahulu, kemudian kod ringkas.
+ * @returns {{ jadual, laporan }}
+ */
+export function stabilkanId(baru, lama) {
+  const norm = (s) => String(s || '').toUpperCase().replace(/\s+/g, ' ').trim();
+  const laporan = {};
+
+  const padankan = (jenis, kunci) => {
+    const kB = baru[jenis] || {}, kL = (lama && lama[jenis]) || {};
+    const peta = {}, dipakai = new Set();
+    for (const [id, x] of Object.entries(kB)) {
+      let jumpa = null;
+      for (const k of kunci) {
+        const v = norm(k(x));
+        if (!v) continue;
+        jumpa = Object.keys(kL).find((lid) => !dipakai.has(lid) && norm(k(kL[lid])) === v);
+        if (jumpa) break;
+      }
+      peta[id] = jumpa || id;
+      if (jumpa) dipakai.add(jumpa);
+    }
+    const hasil = {};
+    for (const [id, x] of Object.entries(kB)) hasil[peta[id]] = x;
+    laporan[jenis] = {
+      baharu: Object.keys(kB).filter((id) => !Object.keys(kL).includes(peta[id])).map((id) => peta[id]),
+      hilang: Object.keys(kL).filter((lid) => !dipakai.has(lid) && !(lid in hasil)),
+      sama: dipakai.size,
+    };
+    return { peta, hasil };
+  };
+
+  const g = padankan('guru', [(x) => x.nama, (x) => x.ringkas]);
+  const k = padankan('kelas', [(x) => x.nama]);
+  const s = padankan('subjek', [(x) => x.nama, (x) => x.ringkas]);
+
+  const jadual = {
+    ...baru,
+    guru: g.hasil,
+    kelas: k.hasil,
+    subjek: s.hasil,
+    slot: baru.slot.map((x) => ({
+      ...x,
+      kelas: k.peta[x.kelas] || x.kelas,
+      subjek: s.peta[x.subjek] || x.subjek,
+      guru: x.guru.map((id) => g.peta[id] || id),
+    })),
+  };
+  laporan.slot = { lama: lama?.slot?.length || 0, baharu: jadual.slot.length };
+  return { jadual, laporan };
+}
+
+/** Gabung kamus nama beberapa versi jadual (untuk paparan nama dalam julat tarikh) */
+export function gabungKamus(senarai) {
+  const K = { kelas: {}, guru: {}, subjek: {} };
+  for (const j of senarai.filter(Boolean)) for (const kol of Object.keys(K)) Object.assign(K[kol], j[kol]);
+  return K;
+}
+
 /** Label waktu ringkas, cth [4,5] → "Waktu 4–5" */
 export function labelWaktu(waktu) {
   return waktu.length > 1 ? `Waktu ${waktu[0]}–${waktu[waktu.length - 1]}` : `Waktu ${waktu[0]}`;

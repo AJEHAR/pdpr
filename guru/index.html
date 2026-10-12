@@ -28,8 +28,8 @@
 <script type="module">
   import { kawal } from '../assets/js/auth.js';
   import { pasangApp, esc, ikon, namaCantik, hariIni, tambahHari, isninMinggu, formatTarikh } from '../assets/js/ui.js';
-  import { muatJadual, kalendarPdpr, kelasTerlibat, bahanJulat, petaSiap } from '../assets/js/data.js';
-  import { sesiHari, HARI, labelWaktu } from '../assets/js/jadual.js';
+  import { muatJadual, muatJadualUntuk, kalendarPdpr, kelasTerlibat, bahanJulat, petaSiap } from '../assets/js/data.js';
+  import { sesiHari, HARI, labelWaktu, gabungKamus } from '../assets/js/jadual.js';
 
   const sesiAuth = await kawal('guru', { perluGuru: true });
   await pasangApp('guru/index.html', sesiAuth);
@@ -64,13 +64,14 @@
     $('label-minggu').textContent = `${formatTarikh(tarikh[0], 'pendek').replace(/^\S+\s/, '')} – ${formatTarikh(tarikh[4], 'pendek').replace(/^\S+\s/, '')}`;
     $('isi').innerHTML = `<p class="memuat">Memuatkan…</p>`;
 
-    const [status, bahan] = await Promise.all([kalendarPdpr(tarikh[0], tarikh[4], tarikh), bahanJulat(tarikh[0], tarikh[4])]);
+    const [status, bahan, jMap] = await Promise.all([kalendarPdpr(tarikh[0], tarikh[4], tarikh), bahanJulat(tarikh[0], tarikh[4]), muatJadualUntuk(tarikh)]);
+    const K = gabungKamus([...Object.values(jMap), jadual]); // nama dari semua versi yang terlibat
     const siap = petaSiap(bahan);
 
     // Bina data sesi + keadaan
     let jumlah = 0, diisi = 0, hariIniBelum = 0;
     const hari = tarikh.map((t, h) => {
-      const sesi = sesiHari(jadual, h, { guruId: profil.guruId }).map((s) => {
+      const sesi = sesiHari(jMap[t], h, { guruId: profil.guruId }).map((s) => {
         const pdpr = kelasTerlibat(status[t], s.kelas);
         const ada = siap[t]?.has(s.id);
         const keadaan = !pdpr ? 'bukan' : ada ? 'ada' : 'belum';
@@ -90,8 +91,8 @@
       <div class="stat"><small>Belum diisi hari ini</small><b>${hariIniBelum}</b></div>`;
 
     const pautanUpload = (t, s) => `upload.html?t=${t}&sesi=${encodeURIComponent(s.id)}`;
-    const namaKelas = (s) => jadual.kelas[s.kelas]?.nama || '?';
-    const namaSubjek = (s, panjang) => (panjang ? jadual.subjek[s.subjek]?.nama : jadual.subjek[s.subjek]?.ringkas) || '?';
+    const namaKelas = (s) => K.kelas[s.kelas]?.nama || '?';
+    const namaSubjek = (s, panjang) => (panjang ? K.subjek[s.subjek]?.nama : K.subjek[s.subjek]?.ringkas) || '?';
 
     // ---------- Desktop: grid mingguan ----------
     let g = `<div class="gm-kepala"></div>` + hari.map((d) => `

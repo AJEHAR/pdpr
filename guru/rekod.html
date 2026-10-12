@@ -70,7 +70,7 @@
               <td><a href="${esc(b.url)}" target="_blank" rel="noopener" style="display:inline-flex;gap:8px;align-items:center;font-weight:600">
                 ${ikon(b.jenis === 'pautan' ? 'pautan' : 'fail', 18)} ${esc(b.nama || b.url)}</a>
                 ${b.bagiPihak ? `<div><span class="lencana amaran">Bagi pihak ${esc(namaCantik(jadual.guru[b.guruId]?.nama || '?'))}</span></div>` : ''}</td>
-              <td data-label="Sesi">${(b.sesi || []).map((s) => `<div class="kecil">${esc(labelSesi(s))}</div>`).join('')}</td>
+              <td data-label="Sesi">${(b.sesi || []).map((s, i) => `<div class="kecil">${esc(b.label?.[i] || labelSesi(s))}</div>`).join('')}</td>
               <td data-label="Catatan" class="kecil lembut">${esc(b.catatan || '—')}</td>
               <td style="text-align:right"><button class="btn bahaya kecil" data-padam="${b.id}">${ikon('sampah', 16)} Padam</button></td>
             </tr>`).join('')}

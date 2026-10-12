@@ -83,7 +83,7 @@
   $('info-jadual').innerHTML = `
     <p style="margin:0 0 6px">Sumber: <b>${esc(jadual.sumber || 'aSc')}</b> · dijana ${esc((jadual.dijana || '').slice(0, 10))}</p>
     <p class="lembut" style="margin:0">${Object.keys(jadual.kelas).length} kelas · ${Object.keys(jadual.guru).length} guru · ${jadual.slot.length} slot seminggu</p>
-    <p class="bantuan">Import jadual baharu dan jadual prasekolah akan tersedia dalam Fasa 3.</p>`;
+    <p class="bantuan"><a href="jadual.html">Import jadual baharu →</a></p>`;
 
   // Kecilkan logo → dataURL (disimpan terus dalam Firestore)
   $('in-logo').onchange = async (e) => {

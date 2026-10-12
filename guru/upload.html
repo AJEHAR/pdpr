@@ -110,7 +110,7 @@
     </div>`;
 
   const $ = (id) => document.getElementById(id);
-  let sesiHariIni = [], statusHari = { aktif: false }, sedia = new Map();
+  let sesiHariIni = [], statusHari = { aktif: false }, sedia = new Map(), jd = jadual; // jd = jadual ikut tarikh dipilih
 
   // ---------- Sesi ----------
   async function muatSesi() {
@@ -121,15 +121,16 @@
     if (h < 0) { $('info-hari').innerHTML = `<div class="notis amaran">${esc(formatTarikh(t))} ialah hujung minggu.</div>`; sesiHariIni = []; return kemaskini(); }
 
     $('info-hari').innerHTML = `<p class="lembut kecil">Memuatkan…</p>`;
-    const [st, bahan] = await Promise.all([statusPdpr(t), bahanTarikh(t)]);
+    const [st, bahan, jdT] = await Promise.all([statusPdpr(t), bahanTarikh(t), muatJadual(t)]);
+    jd = jdT;
     statusHari = st;
     sedia = new Map();
     bahan.forEach((b) => (b.sesi || []).forEach((s) => sedia.set(s, (sedia.get(s) || 0) + 1)));
-    sesiHariIni = sesiHari(jadual, h, { guruId: keadaan.guruId });
+    sesiHariIni = sesiHari(jd, h, { guruId: keadaan.guruId });
     // buang pilihan yang bukan milik hari/guru ini
     keadaan.dipilih = new Set([...keadaan.dipilih].filter((id) => sesiHariIni.some((s) => s.id === id)));
 
-    const g = jadual.guru[keadaan.guruId];
+    const g = jd.guru[keadaan.guruId];
     $('info-hari').innerHTML = `
       <p class="kecil" style="margin:0 0 10px"><b>${esc(formatTarikh(t))}</b>${keadaan.guruId !== profil.guruId ? ` · bagi pihak <b>${esc(namaCantik(g?.nama))}</b>` : ''}</p>
       ${st.aktif ? (st.catatan ? `<div class="notis info">${esc(st.catatan)}</div>` : '') : `<div class="notis amaran">Tarikh ini <b>bukan hari PDPR</b>. Pilih tarikh lain.</div>`}`;
@@ -139,7 +140,7 @@
       const n = sedia.get(s.id) || 0;
       return `<label ${pdpr ? '' : 'style="opacity:.55"'}>
         <input type="checkbox" value="${s.id}" ${keadaan.dipilih.has(s.id) ? 'checked' : ''} ${pdpr ? '' : 'disabled'}>
-        <span class="t"><b>${esc(jadual.kelas[s.kelas]?.nama)} · ${esc(jadual.subjek[s.subjek]?.nama)}</b>
+        <span class="t"><b>${esc(jd.kelas[s.kelas]?.nama)} · ${esc(jd.subjek[s.subjek]?.nama)}</b>
           <small>${s.mula}–${s.tamat} · ${labelWaktu(s.waktu)}${s.kumpulan.length ? ' · ' + esc(s.kumpulan.join(' & ')) : ''}</small></span>
         ${!pdpr ? '<span class="lencana tiada">Bukan PDPR</span>' : n ? `<span class="lencana">✓ ${n}</span>` : '<span class="lencana amaran">Belum</span>'}
       </label>`;
@@ -223,22 +224,23 @@
     btn.disabled = true;
     const sesiPilih = sesiHariIni.filter((s) => keadaan.dipilih.has(s.id));
     const uniq = (a) => [...new Set(a)];
-    const g = jadual.guru[keadaan.guruId];
+    const g = jd.guru[keadaan.guruId];
     const asas = {
       tarikh: keadaan.tarikh,
       sesi: sesiPilih.map((s) => s.id),
+      label: sesiPilih.map((s) => `${jd.kelas[s.kelas]?.nama} · ${jd.subjek[s.subjek]?.ringkas} (${labelWaktu(s.waktu).replace('Waktu ', 'W')})`),
       kelasIds: uniq(sesiPilih.map((s) => s.kelas)),
       subjekIds: uniq(sesiPilih.map((s) => s.subjek)),
       guruIds: uniq(sesiPilih.flatMap((s) => s.guru)),
       guruId: keadaan.guruId,
       uid: u.uid,
       olehGuruId: profil.guruId || null,
-      olehNama: profil.guruId ? jadual.guru[profil.guruId]?.nama || profil.nama : profil.nama || u.email,
+      olehNama: profil.guruId ? jd.guru[profil.guruId]?.nama || profil.nama : profil.nama || u.email,
       bagiPihak: keadaan.guruId !== profil.guruId,
       catatan: $('catatan').value.trim(),
     };
-    const kelasUtama = jadual.kelas[asas.kelasIds[0]]?.nama || 'LAIN';
-    const awalan = [kelasUtama, jadual.subjek[asas.subjekIds[0]]?.ringkas, g?.ringkas].filter(Boolean).join('_').replace(/[\\/:*?"<>| ]+/g, '-');
+    const kelasUtama = jd.kelas[asas.kelasIds[0]]?.nama || 'LAIN';
+    const awalan = [kelasUtama, jd.subjek[asas.subjekIds[0]]?.ringkas, g?.ringkas].filter(Boolean).join('_').replace(/[\\/:*?"<>| ]+/g, '-');
     let berjaya = 0, gagal = 0;
 
     try {
@@ -273,7 +275,7 @@
     }
 
     if (gagal && !berjaya) { toast('Muat naik gagal. Semak senarai fail.', 'ralat'); btn.disabled = false; return; }
-    const kelasSlug = jadual.kelas[asas.kelasIds[0]]?.slug;
+    const kelasSlug = jd.kelas[asas.kelasIds[0]]?.slug;
     el.innerHTML = `
       <div class="kad kotak-masuk">
         <div style="font-size:2.6rem">🎉</div>

@@ -26,6 +26,7 @@ export const formatTarikh = (t, gaya = 'panjang') =>
 
 // ---------- Ikon (garis, 24px) ----------
 const P = {
+  grid: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
   rumah: '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
   kalendar: '<rect x="3" y="4.5" width="18" height="16.5" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/>',
   upload: '<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>',
@@ -112,6 +113,7 @@ export async function pasangApp(aktif, { u, profil }) {
     ? [
         { href: 'admin/index.html', label: 'Papan Pemuka', pendek: 'Papan', ikon: 'carta' },
         { href: 'admin/kalendar.html', label: 'Kalendar PDPR', pendek: 'Kalendar', ikon: 'kalendar' },
+        { href: 'admin/jadual.html', label: 'Jadual Waktu', pendek: 'Jadual', ikon: 'grid' },
         { href: 'admin/pengguna.html', label: 'Pengguna', pendek: 'Pengguna', ikon: 'pengguna' },
         { href: 'admin/tetapan.html', label: 'Tetapan', pendek: 'Tetapan', ikon: 'tetapan' },
       ]

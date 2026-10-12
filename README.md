@@ -12,7 +12,8 @@ dan untuk murid/ibu bapa melihat bahan mengikut kelas dan tarikh. Ada susun atur
 |---|---|---|
 | 1 | Penukar jadual aSc, enjin gabung sesi, laman utama, halaman awam kelas | ✅ |
 | 2 | Log masuk Google, pilih nama, Jadual Saya, Upload (fail/kamera/pautan, gabung sesi, guru ganti), Rekod Saya, Admin: papan pemuka, kalendar PDPR, pengguna, tetapan; Apps Script | ✅ |
-| 3 | Import jadual XML di laman, jadual prasekolah (mod harian), laporan julat tarikh | ⏳ |
+| 3a | Import jadual XML di laman (versi bertarikh, ID stabil) | ✅ |
+| 3b | Jadual prasekolah (mod harian), laporan julat tarikh | ⏳ |
 
 ## Halaman
 
@@ -26,6 +27,7 @@ dan untuk murid/ibu bapa melihat bahan mengikut kelas dan tarikh. Ada susun atur
 | `guru/rekod.html` | Guru | Semua upload saya, padam |
 | `admin/index.html` | Admin | Pematuhan harian ikut guru/kelas, CSV |
 | `admin/kalendar.html` | Admin | Tanda hari PDPR (semua / kelas tertentu, julat tarikh) |
+| `admin/jadual.html` | Admin | Import XML aSc baharu, pratonton perubahan, versi bertarikh |
 | `admin/pengguna.html` | Admin | Luluskan Gmail, daftar awal emel (satu/pukal), lantik admin, pautkan semula nama |
 | `admin/tetapan.html` | Admin | Nama sekolah, logo, URL Apps Script, had saiz fail |
 
@@ -70,12 +72,10 @@ npx serve .        # atau: python -m http.server 8000
 > ⚠️ Gunakan **akaun Gmail biasa** (bukan DELiMa) untuk Apps Script dan folder Drive.
 > Akaun DELiMa biasanya menyekat perkongsian "sesiapa yang ada pautan", jadi ibu bapa tidak dapat membuka fail.
 
-1. Dalam Google Drive akaun tersebut, cipta folder `PDPR`. Salin ID folder (bahagian akhir URL).
-2. Buka https://script.google.com → **New project** → tampal isi `apps-script/Code.gs`.
-3. Isi `FIREBASE_API_KEY`, `FIREBASE_PROJECT_ID` dan `FOLDER_INDUK_ID`.
-4. Pilih fungsi `ujiKebenaran` → **Run** → benarkan akses.
-5. **Deploy → New deployment → Web app**: *Execute as* = **Me**, *Who has access* = **Anyone** → Deploy.
-6. Salin URL `.../exec` → tampal di **Admin → Tetapan → URL Web App** → **Uji sambungan** → Simpan.
+1. Buka https://script.google.com dengan akaun tersebut → **New project** → tampal isi `apps-script/Code.gs`.
+2. Pilih fungsi `sediakan` → **Run** → benarkan akses. Folder `PDPR` dicipta automatik dalam My Drive.
+3. **Deploy → New deployment → Web app**: *Execute as* = **Me**, *Who has access* = **Anyone** → Deploy.
+4. Salin URL `.../exec` → tampal di **Admin → Tetapan → URL Web App** → **Uji sambungan** → Simpan.
 
 Fail disusun automatik **ikut guru**:
 
@@ -116,3 +116,15 @@ apps-script/Code.gs    penerima fail Google Drive
 firestore.rules        peraturan keselamatan
 data/jadual.json       jadual semasa (tukar dengan tools/tukar-jadual.mjs)
 ```
+
+## Kemas kini jadual waktu
+
+1. Dalam aSc: **File → Export → aSc Timetables 2012 XML**.
+2. **Admin → Jadual Waktu** → pilih fail XML → tetapkan **Berkuat kuasa mulai** → semak perubahan → **Simpan**.
+
+- Setiap import ialah **versi bertarikh**. Tarikh sebelum `mulai` kekal menggunakan jadual lama,
+  jadi papan pemuka dan rekod minggu lepas tidak berubah.
+- ID guru, kelas dan subjek **dipadankan semula ikut nama dan kod** dengan jadual sebelumnya, jadi akaun
+  guru kekal terpaut walaupun aSc menjana ID baharu.
+- Guru yang tiada dalam jadual baharu disenaraikan dalam pratonton; pautkan semula di **Admin → Pengguna** jika perlu.
+- Import pertama turut menyimpan jadual asal (`data/jadual.json`) sebagai versi "Asal" secara automatik.
