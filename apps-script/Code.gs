@@ -70,8 +70,14 @@ function simpan(req, pengguna) {
   if (bait.length > HAD_MB * 1024 * 1024) throw new Error('Fail melebihi ' + HAD_MB + ' MB.');
 
   const tarikh = /^\d{4}-\d{2}-\d{2}$/.test(req.tarikh) ? req.tarikh : Utilities.formatDate(new Date(), 'Asia/Kuala_Lumpur', 'yyyy-MM-dd');
-  // Struktur: PDPR / 2026-10 / 2026-10-13 / 4 RAUB / fail
-  const folder = dapatFolder([tarikh.slice(0, 7), tarikh, namaSelamat(req.kelas || 'LAIN-LAIN')]);
+  // Struktur: PDPR / KRY - NUR KHAIRIAH BINTI ROSDI / 2026-10 / 2026-10-13 / 4 RAUB / fail
+  // (folder guru = guru ASAL sesi, walaupun dimuat naik oleh guru ganti)
+  const folder = dapatFolder([
+    namaSelamat(req.guru || 'LAIN-LAIN'),
+    tarikh.slice(0, 7),
+    tarikh,
+    namaSelamat(req.kelas || 'LAIN-LAIN'),
+  ]);
   const blob = Utilities.newBlob(bait, req.mime || 'application/octet-stream', namaSelamat(req.nama || 'fail'));
   const fail = folder.createFile(blob);
   fail.setDescription(JSON.stringify({ uid: pengguna.uid, email: pengguna.email, masa: new Date().toISOString() }));

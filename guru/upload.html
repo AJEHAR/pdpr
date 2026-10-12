@@ -254,7 +254,8 @@
             const fail = await kecilkanGambar(x.f);
             if (fail.size > HAD) throw new Error(`Melebihi ${tetapan.hadSaizMB || 10} MB`);
             x.status = 'Memuat naik…'; lukisFail();
-            const r = await hantarFail(fail, { tarikh: asas.tarikh, kelas: kelasUtama, awalan }, tetapan.appsScriptUrl);
+            const folderGuru = g ? `${g.ringkas} - ${g.nama}` : 'LAIN-LAIN';
+            const r = await hantarFail(fail, { tarikh: asas.tarikh, kelas: kelasUtama, guru: folderGuru, awalan }, tetapan.appsScriptUrl);
             await tambahBahan({ ...asas, jenis: 'fail', url: r.url, nama: x.f.name, fileId: r.id });
             x.siap = true; x.status = 'Siap'; berjaya++;
           } catch (e) {

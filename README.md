@@ -77,7 +77,14 @@ npx serve .        # atau: python -m http.server 8000
 5. **Deploy → New deployment → Web app**: *Execute as* = **Me**, *Who has access* = **Anyone** → Deploy.
 6. Salin URL `.../exec` → tampal di **Admin → Tetapan → URL Web App** → **Uji sambungan** → Simpan.
 
-Fail disusun automatik: `PDPR / 2026-10 / 2026-10-13 / 4 RAUB / 4-RAUB_BI_KRY_lembaran.pdf`.
+Fail disusun automatik **ikut guru**:
+
+```
+PDPR / KRY - NUR KHAIRIAH BINTI ROSDI / 2026-10 / 2026-10-13 / 4 RAUB / 4-RAUB_BI_KRY_lembaran.pdf
+```
+
+Folder guru ialah **guru asal** sesi (fail guru ganti masuk ke folder guru yang tidak hadir).
+Tip: kongsi folder setiap guru kepada guru itu (Viewer) supaya mereka boleh semak bukti sendiri di Drive.
 Jika anda ubah `Code.gs`, buat **Deploy → Manage deployments → Edit → New version** (URL kekal sama).
 
 ## Aliran akaun guru

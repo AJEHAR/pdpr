@@ -33,7 +33,7 @@ const keBase64 = (fail) =>
 /**
  * Hantar satu fail ke Apps Script.
  * @param {File} fail
- * @param {{tarikh, kelas, awalan}} meta  kelas = nama folder kelas, awalan = awalan nama fail
+ * @param {{tarikh, kelas, guru, awalan}} meta  guru/kelas = nama folder, awalan = awalan nama fail
  * @param {string} url  URL Web App Apps Script (dari tetapan)
  * @returns {Promise<{url:string, id:string, nama:string}>}
  */
@@ -51,6 +51,7 @@ export async function hantarFail(fail, meta, url) {
     data: await keBase64(fail),
     tarikh: meta.tarikh,
     kelas: meta.kelas || 'LAIN-LAIN',
+    guru: meta.guru || 'LAIN-LAIN',
   };
   // text/plain mengelakkan "preflight" CORS yang tidak disokong Apps Script
   const r = await fetch(url, { method: 'POST', body: JSON.stringify(badan), headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
