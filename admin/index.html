@@ -4,6 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Papan Pemuka · Portal PDPR</title>
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#0f5c4d">
+  <link rel="icon" type="image/png" href="../assets/img/favicon.png">
+  <link rel="apple-touch-icon" href="../assets/img/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="PDPR CBA4082">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <link rel="stylesheet" href="../assets/css/style.css">
 </head>
 <body>
@@ -114,7 +121,7 @@
             const pc = Math.round((r.ada / r.n) * 100);
             const belum = r.s.filter((x) => !x.ada);
             return `<tr>
-              <td><b>${esc(nama(r.id))}</b>${paparan === 'guru' ? `<div class="kecil lembut">${esc(jadual.guru[r.id]?.ringkas || '')}</div>` : ''}</td>
+              <td>${paparan === 'guru' ? `<a href="../guru/index.html?lihat=${encodeURIComponent(r.id)}&m=${laporan.t}" style="font-weight:700;color:inherit">${esc(nama(r.id))}</a>` : `<b>${esc(nama(r.id))}</b>`}${paparan === 'guru' ? `<div class="kecil lembut">${esc(jadual.guru[r.id]?.ringkas || '')}</div>` : ''}</td>
               <td data-label="Diisi"><b>${r.ada}</b> / ${r.n}</td>
               <td data-label="Kemajuan"><div class="bar-maju" style="margin:0"><i style="width:${pc}%;background:${pc === 100 ? 'var(--utama-2)' : pc >= 50 ? 'var(--aksen)' : 'var(--bahaya)'}"></i></div></td>
               <td data-label="Belum">${belum.length ? `<details><summary class="kecil" style="cursor:pointer">${belum.length} sesi</summary>${belum.map((s) => barisSesi(s, paparan === 'kelas')).join('')}</details>` : '<span class="lencana">Lengkap ✓</span>'}</td>

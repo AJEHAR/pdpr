@@ -1,0 +1,8 @@
+{
+  "indexes": [
+    { "collectionGroup": "uploads",  "queryScope": "COLLECTION", "fields": [ { "fieldPath": "kelasIds", "arrayConfig": "CONTAINS" }, { "fieldPath": "tarikh", "order": "ASCENDING" } ] },
+    { "collectionGroup": "uploads",  "queryScope": "COLLECTION", "fields": [ { "fieldPath": "guruIds",  "arrayConfig": "CONTAINS" }, { "fieldPath": "tarikh", "order": "ASCENDING" } ] },
+    { "collectionGroup": "hantaran", "queryScope": "COLLECTION", "fields": [ { "fieldPath": "guruIds",  "arrayConfig": "CONTAINS" }, { "fieldPath": "tarikh", "order": "ASCENDING" } ] }
+  ],
+  "fieldOverrides": []
+}

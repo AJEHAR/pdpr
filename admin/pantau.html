@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pantau Guru · Portal PDPR</title>
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#0f5c4d">
+  <link rel="icon" type="image/png" href="../assets/img/favicon.png">
+  <link rel="apple-touch-icon" href="../assets/img/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="PDPR CBA4082">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main>
+  <div class="kepala">
+    <div>
+      <h1>Pantau Guru</h1>
+      <p class="lembut">Pilih guru untuk melihat jadual, bahan yang dimuat naik dan kerja murid (lihat sahaja).</p>
+    </div>
+    <div class="minggu-nav">
+      <button class="btn kedua kecil" id="sebelum" aria-label="Minggu sebelum"></button>
+      <b id="label-minggu"></b>
+      <button class="btn kedua kecil" id="selepas" aria-label="Minggu selepas"></button>
+      <button class="btn kedua kecil" id="kini">Minggu ini</button>
+    </div>
+  </div>
+
+  <div class="statistik" id="statistik"></div>
+
+  <div class="kad" style="padding:14px;margin-bottom:14px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <div class="cari-kelas" style="position:static;padding:0;margin:0;flex:1;min-width:220px">
+        <div class="kotak"><span class="ik-cari" id="ik-cari"></span>
+          <input type="search" id="cari" placeholder="Cari nama atau kod guru…" autocomplete="off" aria-label="Cari guru" style="height:44px;box-shadow:none"></div>
+      </div>
+      <div class="tab-segmen" role="tablist" id="penapis">
+        <button data-p="semua" aria-selected="true">Semua</button>
+        <button data-p="belum">Belum lengkap</button>
+        <button data-p="tiada">Belum daftar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="isi"><p class="memuat">Memuatkan…</p></div>
+</main>
+
+<script type="module">
+  import { kawal } from '../assets/js/auth.js';
+  import { pasangApp, esc, ikon, namaCantik, hariIni, tambahHari, isninMinggu, formatTarikh } from '../assets/js/ui.js';
+  import { muatJadual, muatJadualUntuk, kalendarPdpr, kelasTerlibat, bahanJulat, petaSiap, senarai } from '../assets/js/data.js';
+  import { sesiHari, gabungKamus } from '../assets/js/jadual.js';
+  import { ikonCari } from '../assets/js/cari-kelas.js';
+
+  const sesiAuth = await kawal('admin');
+  await pasangApp('admin/pantau.html', sesiAuth);
+
+  const $ = (id) => document.getElementById(id);
+  $('sebelum').innerHTML = ikon('kiri', 18);
+  $('selepas').innerHTML = ikon('kanan', 18);
+  $('ik-cari').innerHTML = ikonCari;
+
+  const kini = hariIni();
+  const p = new URLSearchParams(location.search);
+  let isnin = isninMinggu(/^\d{4}-\d{2}-\d{2}$/.test(p.get('m') || '') ? p.get('m') : kini);
+  let penapis = p.get('p') || 'semua';
+  let baris = [];
+
+  // Akaun pengguna & daftar awal (sekali sahaja)
+  const [users, jemputan] = await Promise.all([senarai('users').catch(() => []), senarai('jemputan').catch(() => [])]);
+  const akaunGuru = {};
+  users.filter((x) => x.guruId).forEach((x) => (akaunGuru[x.guruId] ??= []).push(x));
+  const jemputGuru = Object.fromEntries(jemputan.filter((j) => j.guruId).map((j) => [j.guruId, j]));
+
+  const masaRingkas = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleDateString('ms-MY', { weekday: 'short', day: 'numeric', month: 'short' }) + ', ' + d.toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  async function muat() {
+    history.replaceState(null, '', `?m=${isnin}${penapis !== 'semua' ? '&p=' + penapis : ''}`);
+    const tarikh = [0, 1, 2, 3, 4].map((i) => tambahHari(isnin, i));
+    $('label-minggu').textContent = `${formatTarikh(tarikh[0], 'pendek').replace(/^\S+\s/, '')} – ${formatTarikh(tarikh[4], 'pendek').replace(/^\S+\s/, '')}`;
+    $('isi').innerHTML = `<p class="memuat">Memuatkan…</p>`;
+
+    const [status, bahan, jMap, jSemasa] = await Promise.all([
+      kalendarPdpr(tarikh[0], tarikh[4], tarikh), bahanJulat(tarikh[0], tarikh[4]), muatJadualUntuk(tarikh), muatJadual(),
+    ]);
+    const K = gabungKamus([...Object.values(jMap), jSemasa]);
+    const siap = petaSiap(bahan);
+
+    baris = Object.entries(K.guru).map(([gid, g]) => {
+      let jumlah = 0, diisi = 0;
+      tarikh.forEach((t, h) => {
+        for (const s of sesiHari(jMap[t], h, { guruId: gid })) {
+          if (!kelasTerlibat(status[t], s.kelas)) continue;
+          jumlah++;
+          if (siap[t]?.has(s.id)) diisi++;
+        }
+      });
+      const milik = bahan.filter((b) => b.olehGuruId === gid || (b.guruId === gid && !b.bagiPihak));
+      const terakhir = milik.reduce((m, b) => (b.masa > m ? b.masa : m), '');
+      const akaun = akaunGuru[gid] || [];
+      const st = akaun.some((a) => a.status === 'lulus') ? 'lulus' : akaun.length ? 'menunggu' : jemputGuru[gid] ? 'didaftar' : 'tiada';
+      return { gid, g, jumlah, diisi, pc: jumlah ? Math.round((diisi / jumlah) * 100) : null, terakhir, bilBahan: milik.length,
+        st, emel: akaun.map((a) => a.email).join(', ') || jemputGuru[gid]?.id || '' };
+    });
+
+    const adaSesi = baris.filter((b) => b.jumlah);
+    const lengkap = adaSesi.filter((b) => b.diisi === b.jumlah).length;
+    const tiadaAkaun = baris.filter((b) => b.st === 'tiada' || b.st === 'didaftar').length;
+    const tot = adaSesi.reduce((n, b) => n + b.jumlah, 0), totIsi = adaSesi.reduce((n, b) => n + b.diisi, 0);
+    $('statistik').innerHTML = `
+      <div class="stat"><small>Guru dengan sesi PDPR</small><b>${adaSesi.length}</b></div>
+      <div class="stat"><small>Lengkap minggu ini</small><b>${lengkap}</b><div class="bar-maju"><i style="width:${adaSesi.length ? (lengkap / adaSesi.length) * 100 : 0}%"></i></div></div>
+      <div class="stat"><small>Pematuhan keseluruhan</small><b>${tot ? Math.round((totIsi / tot) * 100) : 0}%</b></div>
+      <div class="stat"><small>Belum log masuk</small><b>${tiadaAkaun}</b></div>`;
+    lukis();
+  }
+
+  const LABEL_ST = {
+    lulus: '<span class="lencana">Aktif</span>',
+    menunggu: '<span class="lencana amaran">Menunggu kelulusan</span>',
+    didaftar: '<span class="lencana tiada">Didaftar · belum log masuk</span>',
+    tiada: '<span class="lencana bahaya">Belum daftar</span>',
+  };
+
+  function lukis() {
+    const q = $('cari').value.trim().toLowerCase();
+    const xs = baris
+      .filter((b) => !q || b.g.nama.toLowerCase().includes(q) || (b.g.ringkas || '').toLowerCase() === q || (b.g.ringkas || '').toLowerCase().startsWith(q))
+      .filter((b) => penapis === 'semua' || (penapis === 'belum' ? b.jumlah && b.diisi < b.jumlah : b.st === 'tiada' || b.st === 'didaftar'))
+      .sort((a, b) => (a.pc ?? 101) - (b.pc ?? 101) || a.g.nama.localeCompare(b.g.nama, 'ms'));
+
+    document.querySelectorAll('#penapis button').forEach((x) => x.setAttribute('aria-selected', x.dataset.p === penapis));
+    if (!xs.length) { $('isi').innerHTML = `<div class="kosong"><p>Tiada guru sepadan.</p></div>`; return; }
+
+    $('isi').innerHTML = `<div class="balut-jadual"><table class="jadual-data jadual-kad">
+      <thead><tr><th>Guru</th><th>Akaun</th><th>Sesi diisi (minggu ini)</th><th>Upload terakhir</th><th></th></tr></thead>
+      <tbody>${xs.map((b) => {
+        const warna = b.pc === null ? 'var(--garis)' : b.pc === 100 ? 'var(--utama-2)' : b.pc >= 50 ? 'var(--aksen)' : 'var(--bahaya)';
+        return `<tr class="baris-guru" data-g="${esc(b.gid)}">
+          <td><b>${esc(namaCantik(b.g.nama))}</b><div class="kecil lembut">${esc(b.g.ringkas || '')}${b.emel ? ' · ' + esc(b.emel) : ''}</div></td>
+          <td data-label="Akaun">${LABEL_ST[b.st]}</td>
+          <td data-label="Diisi">${b.jumlah
+            ? `<div class="peratus"><b>${b.diisi}/${b.jumlah}</b><div class="bar-maju"><i style="width:${b.pc}%;background:${warna}"></i></div></div>`
+            : '<span class="lembut kecil">Tiada sesi PDPR</span>'}</td>
+          <td data-label="Terakhir" class="kecil">${b.terakhir ? esc(masaRingkas(b.terakhir)) + ` <span class="lembut">· ${b.bilBahan} bahan</span>` : '<span class="lembut">—</span>'}</td>
+          <td style="text-align:right"><a class="btn kedua kecil" href="../guru/index.html?lihat=${encodeURIComponent(b.gid)}&m=${isnin}">${ikon('mata', 16)} Lihat</a></td>
+        </tr>`;
+      }).join('')}</tbody></table></div>
+      <p class="bantuan">${xs.length} guru dipaparkan. Klik baris untuk melihat jadual, bahan dan kerja murid guru tersebut.</p>`;
+  }
+
+  $('isi').addEventListener('click', (e) => {
+    if (e.target.closest('a')) return;
+    const tr = e.target.closest('[data-g]');
+    if (tr) location.href = `../guru/index.html?lihat=${encodeURIComponent(tr.dataset.g)}&m=${isnin}`;
+  });
+  $('cari').oninput = lukis;
+  document.querySelectorAll('#penapis button').forEach((b) => (b.onclick = () => { penapis = b.dataset.p; history.replaceState(null, '', `?m=${isnin}${penapis !== 'semua' ? '&p=' + penapis : ''}`); lukis(); }));
+  $('sebelum').onclick = () => { isnin = tambahHari(isnin, -7); muat(); };
+  $('selepas').onclick = () => { isnin = tambahHari(isnin, 7); muat(); };
+  $('kini').onclick = () => { isnin = isninMinggu(kini); muat(); };
+  muat();
+</script>
+</body>
+</html>

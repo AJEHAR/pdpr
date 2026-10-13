@@ -4,6 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Upload Bahan · Portal PDPR</title>
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#0f5c4d">
+  <link rel="icon" type="image/png" href="../assets/img/favicon.png">
+  <link rel="apple-touch-icon" href="../assets/img/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="PDPR CBA4082">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <link rel="stylesheet" href="../assets/css/style.css">
 </head>
 <body>
@@ -21,7 +28,7 @@
 <script type="module">
   import { kawal } from '../assets/js/auth.js';
   import { pasangApp, esc, ikon, namaCantik, hariIni, hariBekerja, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
-  import { muatJadual, statusPdpr, kelasTerlibat, bahanTarikh, tambahBahan, muatTetapan } from '../assets/js/data.js';
+  import { muatJadual, statusPdpr, kelasTerlibat, bahanJulat, tambahBahan, muatTetapan } from '../assets/js/data.js';
   import { sesiHari, indeksHari, labelWaktu } from '../assets/js/jadual.js';
   import { hantarFail, kecilkanGambar } from '../assets/js/upload.js';
 
@@ -121,7 +128,7 @@
     if (h < 0) { $('info-hari').innerHTML = `<div class="notis amaran">${esc(formatTarikh(t))} ialah hujung minggu.</div>`; sesiHariIni = []; return kemaskini(); }
 
     $('info-hari').innerHTML = `<p class="lembut kecil">Memuatkan…</p>`;
-    const [st, bahan, jdT] = await Promise.all([statusPdpr(t), bahanTarikh(t), muatJadual(t)]);
+    const [st, bahan, jdT] = await Promise.all([statusPdpr(t), bahanJulat(t, t, keadaan.guruId), muatJadual(t)]);
     jd = jdT;
     statusHari = st;
     sedia = new Map();

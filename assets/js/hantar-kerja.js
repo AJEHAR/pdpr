@@ -45,11 +45,11 @@ async function buatThumb(fail) {
   if (!fail.type.startsWith('image/')) return '';
   try {
     const bmp = await createImageBitmap(fail);
-    const n = Math.min(1, 240 / Math.max(bmp.width, bmp.height));
+    const n = Math.min(1, 200 / Math.max(bmp.width, bmp.height));
     const c = document.createElement('canvas');
     c.width = Math.round(bmp.width * n); c.height = Math.round(bmp.height * n);
     c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
-    return c.toDataURL('image/jpeg', 0.7);
+    return c.toDataURL('image/jpeg', 0.65);
   } catch { return ''; }
 }
 
@@ -266,8 +266,11 @@ export function bukaBorangKerja({ tarikh, sesi, kelasId, jd, tetapan, onSiap }) 
           const f = await kecilkanGambar(x.f);
           if (f.size > HAD) throw new Error(`Melebihi ${tetapan.hadSaizMB || 10} MB`);
           const r = await hantarKerjaMurid(f, { tarikh, kelas: kelas?.nama, namaMurid, awalan }, tetapan.appsScriptUrl);
-          const id = await tambahHantaran({ ...asas, jenis: 'fail', fileId: r.id, namaFail: x.f.name, url: '' });
-          tambahSejarah({ ...rekodAsas, kunci: id, id, jenis: 'fail', fileId: r.id, namaFail: x.f.name, url: '', thumb: x.pratonton || (await buatThumb(x.f)), masa: new Date().toISOString() });
+          const thumb = x.pratonton || (await buatThumb(x.f));
+          // Gambar kecil turut disimpan bersama rekod supaya guru boleh pratonton (hanya guru boleh baca)
+          const thumbGuru = thumb && thumb.length < 45000 ? thumb : '';
+          const id = await tambahHantaran({ ...asas, jenis: 'fail', fileId: r.id, namaFail: x.f.name, url: '', thumb: thumbGuru });
+          tambahSejarah({ ...rekodAsas, kunci: id, id, jenis: 'fail', fileId: r.id, namaFail: x.f.name, url: '', thumb, masa: new Date().toISOString() });
           k.baru.add(id);
           x.siap = true; x.status = 'Dihantar'; berjaya++;
         } catch (e) { console.error(e); x.ralat = mesejRalat(e); }

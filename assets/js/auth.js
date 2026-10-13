@@ -126,8 +126,17 @@ export async function kawal(perlu = 'guru', pilihan = {}) {
   if (!profil) { location.replace(`${akar}daftar.html`); return new Promise(() => {}); }
 
   if (perlu === 'admin' && !adalahAdmin(profil)) { location.replace(`${akar}guru/index.html`); return new Promise(() => {}); }
-  if (pilihan.perluGuru && !profil.guruId) { location.replace(`${akar}admin/index.html`); return new Promise(() => {}); }
+  if (pilihan.perluGuru && !profil.guruId && !guruDilihat(profil)) { location.replace(`${akar}admin/index.html`); return new Promise(() => {}); }
   return { u, profil };
+}
+
+/**
+ * Mod Pantau Guru (lihat sahaja): admin membuka halaman guru dengan ?lihat=<guruId>.
+ * @returns {string|null} guruId yang sedang dipantau, atau null
+ */
+export function guruDilihat(profil) {
+  const id = new URLSearchParams(location.search).get('lihat');
+  return id && adalahAdmin(profil) ? id : null;
 }
 
 /** Halaman pertama selepas log masuk */

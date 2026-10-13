@@ -29,6 +29,9 @@ dan untuk murid/ibu bapa melihat bahan mengikut kelas dan tarikh. Ada susun atur
 | `guru/rekod.html` | Guru | Semua upload saya, padam |
 | `admin/index.html` | Admin | Pematuhan harian ikut guru/kelas, CSV |
 | `admin/kalendar.html` | Admin | Tanda hari PDPR (semua / kelas tertentu, julat tarikh) |
+| `admin/pantau.html` | Admin | Pantau Guru: senarai guru, % diisi minggu ini, upload terakhir → lihat jadual/bahan/kerja murid guru (lihat sahaja) |
+| `admin/laporan.html` | Admin | Laporan julat tarikh ikut guru/kelas/tarikh · Excel · Cetak/PDF dengan ruang tandatangan |
+| `admin/makluman.html` | Admin | Pengumuman untuk ibu bapa / guru dengan tarikh mula & tamat |
 | `admin/jadual.html` | Admin | Import XML aSc baharu, pratonton perubahan, versi bertarikh |
 | `admin/prasekolah.html` | Admin | Mod harian prasekolah: guru setiap kelas pra, guru tambahan (tiada dalam aSc) |
 | `admin/pengguna.html` | Admin | Luluskan Gmail, daftar awal emel (satu/pukal), lantik admin, pautkan semula nama |
@@ -153,3 +156,23 @@ kemudian mengambil gambar, memilih fail atau menampal pautan video. Tiada akaun 
 1. Firebase → Authentication → Sign-in method → **Anonymous** → Enable.
 2. Firestore → Rules → tampal `firestore.rules` terkini → Publish.
 3. Apps Script → tampal `apps-script/Code.gs` terkini → **Deploy → Manage deployments → ✏️ → Version: New version → Deploy**.
+
+## Indeks Firestore (jimat kuota bacaan)
+
+Cipta 3 indeks komposit di **Firestore → Indexes → Composite → Create index** (rujuk `firestore.indexes.json`):
+
+| Collection | Medan 1 | Medan 2 |
+|---|---|---|
+| `uploads` | `kelasIds` · Array contains | `tarikh` · Ascending |
+| `uploads` | `guruIds` · Array contains | `tarikh` · Ascending |
+| `hantaran` | `guruIds` · Array contains | `tarikh` · Ascending |
+
+Tanpa indeks, laman tetap berfungsi tetapi membaca lebih banyak dokumen. Hasil bacaan juga di-cache 90 saat dalam setiap tab.
+
+## Aplikasi telefon (PWA)
+
+Portal boleh dipasang sebagai aplikasi **PDPR CBA4082** (ikon logo sekolah):
+- **Android (Chrome):** butang *📲 Pasang aplikasi di telefon* di laman utama, atau menu ⋮ → *Install app*.
+- **iPhone (Safari):** Kongsi → *Add to Home Screen*.
+
+Fail: `manifest.webmanifest`, `sw.js`, ikon dalam `assets/img/`.

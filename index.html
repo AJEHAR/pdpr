@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Portal PDPR</title>
   <meta name="description" content="Portal Pembelajaran Di Rumah — jadual dan bahan pembelajaran setiap kelas.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0f5c4d">
+  <link rel="icon" type="image/png" href="assets/img/favicon.png">
+  <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="PDPR CBA4082">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <link rel="stylesheet" href="assets/css/style.css">
 </head>
 <body>
@@ -17,6 +24,7 @@
         <a class="btn" href="kelas.html">Lihat Jadual Kelas</a>
         <a class="btn kedua" href="login.html">Log Masuk Guru</a>
       </div>
+      <button class="btn-pasang" data-pasang hidden>📲 Pasang aplikasi di telefon</button>
     </div>
     <div class="kad status-hari">
       <div class="nav-hari pilih-tarikh">
@@ -39,12 +47,13 @@
 </main>
 
 <script type="module">
-  import { pasangRangka, hariIni, hariBekerja, tambahHari, formatTarikh, esc } from './assets/js/ui.js';
+  import { pasangRangka, pasangButangPasang, hariIni, hariBekerja, tambahHari, formatTarikh, esc } from './assets/js/ui.js';
   import { muatJadual, statusPdpr, kelasTerlibat, bahanTarikh } from './assets/js/data.js';
   import { indeksHari, sesiHari } from './assets/js/jadual.js';
   import { padanKelas, susunKelas, kelasTerakhir, ikonCari } from './assets/js/cari-kelas.js';
 
   pasangRangka('index.html');
+  pasangButangPasang();
 
   const $ = (id) => document.getElementById(id);
   const kini = hariIni();

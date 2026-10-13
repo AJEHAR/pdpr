@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Makluman · Portal PDPR</title>
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#0f5c4d">
+  <link rel="icon" type="image/png" href="../assets/img/favicon.png">
+  <link rel="apple-touch-icon" href="../assets/img/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="PDPR CBA4082">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main>
+  <div class="kepala">
+    <div>
+      <h1>Makluman</h1>
+      <p class="lembut">Pengumuman yang dipaparkan sebagai jalur di bahagian atas laman ibu bapa dan/atau halaman guru.</p>
+    </div>
+  </div>
+
+  <div class="upload-grid">
+    <section class="kad">
+      <h2>Makluman baharu</h2>
+      <form id="borang">
+        <div class="medan"><label for="teks">Teks makluman</label>
+          <textarea id="teks" maxlength="400" required placeholder="cth PDPR dilanjutkan hingga Jumaat, 16 Oktober. Sila semak bahan di portal setiap pagi."></textarea>
+          <p class="bantuan"><span id="kira">0</span>/400 aksara</p></div>
+        <div class="baris-medan">
+          <div class="medan"><label for="sasaran">Dipaparkan kepada</label>
+            <select id="sasaran">
+              <option value="awam">Ibu bapa &amp; murid (laman awam)</option>
+              <option value="guru">Guru (halaman guru)</option>
+              <option value="semua">Semua</option>
+            </select></div>
+          <div class="medan"><label for="jenis">Jenis</label>
+            <select id="jenis"><option value="info">Info (hijau)</option><option value="penting">Penting (merah)</option></select></div>
+        </div>
+        <div class="baris-medan">
+          <div class="medan"><label for="mula">Mula dipaparkan</label><input type="date" id="mula"></div>
+          <div class="medan"><label for="tamat">Tamat</label><input type="date" id="tamat"></div>
+        </div>
+        <div class="medan">
+          <label>Pratonton</label>
+          <div id="pratonton"></div>
+        </div>
+        <button class="btn penuh" id="simpan">Terbitkan makluman</button>
+      </form>
+    </section>
+
+    <section>
+      <h2 style="margin-top:4px">Senarai makluman</h2>
+      <div id="senarai"><p class="memuat">Memuatkan…</p></div>
+    </section>
+  </div>
+</main>
+
+<script type="module">
+  import { kawal } from '../assets/js/auth.js';
+  import { pasangApp, esc, ikon, hariIni, tambahHari, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
+  import { senarai, tambah, buang } from '../assets/js/data.js';
+
+  const sesiAuth = await kawal('admin');
+  await pasangApp('admin/makluman.html', sesiAuth);
+  const { u } = sesiAuth;
+
+  const $ = (id) => document.getElementById(id);
+  const kini = hariIni();
+  $('mula').value = kini;
+  $('tamat').value = tambahHari(kini, 7);
+  const SASARAN = { awam: 'Ibu bapa & murid', guru: 'Guru', semua: 'Semua' };
+
+  function pratonton() {
+    const teks = $('teks').value.trim() || 'Teks makluman akan dipaparkan di sini.';
+    $('kira').textContent = $('teks').value.length;
+    $('pratonton').innerHTML = `<div class="makluman ${$('jenis').value === 'penting' ? 'penting' : ''}">
+      <span class="mk-ikon" aria-hidden="true">${$('jenis').value === 'penting' ? '!' : 'i'}</span><span class="mk-teks">${esc(teks)}</span></div>`;
+  }
+  ['teks', 'jenis'].forEach((id) => ($(id).oninput = pratonton));
+  pratonton();
+
+  async function muat() {
+    const xs = (await senarai('makluman', [], { segar: true })).sort((a, b) => (b.masa || '').localeCompare(a.masa || ''));
+    if (!xs.length) { $('senarai').innerHTML = `<div class="kosong"><div class="ikon">🔔</div><p>Belum ada makluman.</p></div>`; return; }
+    $('senarai').innerHTML = `<div class="senarai-sesi">${xs.map((m) => {
+      const aktif = (!m.mula || m.mula <= kini) && (!m.tamat || m.tamat >= kini);
+      const akan = m.mula && m.mula > kini;
+      return `<div class="kad" style="padding:14px">
+        <div class="makluman ${m.jenis === 'penting' ? 'penting' : ''}" style="margin-bottom:10px">
+          <span class="mk-ikon" aria-hidden="true">${m.jenis === 'penting' ? '!' : 'i'}</span><span class="mk-teks">${esc(m.teks)}</span></div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          ${aktif ? '<span class="lencana">Sedang dipaparkan</span>' : akan ? '<span class="lencana amaran">Akan datang</span>' : '<span class="lencana tiada">Tamat</span>'}
+          <span class="kecil lembut" style="flex:1">${esc(SASARAN[m.sasaran] || m.sasaran)} · ${m.mula ? esc(formatTarikh(m.mula, 'pendek')) : '—'} hingga ${m.tamat ? esc(formatTarikh(m.tamat, 'pendek')) : '—'}</span>
+          <button class="btn bahaya kecil" data-padam="${esc(m.id)}">${ikon('sampah', 16)} Padam</button>
+        </div>
+      </div>`;
+    }).join('')}</div>`;
+  }
+
+  $('borang').onsubmit = async (e) => {
+    e.preventDefault();
+    const teks = $('teks').value.trim();
+    if (!teks) return;
+    if ($('tamat').value && $('mula').value && $('tamat').value < $('mula').value) return toast('Tarikh tamat mesti selepas tarikh mula', 'ralat');
+    $('simpan').disabled = true;
+    try {
+      await tambah('makluman', { teks, sasaran: $('sasaran').value, jenis: $('jenis').value, mula: $('mula').value || '', tamat: $('tamat').value || '',
+        masa: new Date().toISOString(), oleh: u.email });
+      toast('Makluman diterbitkan');
+      $('teks').value = ''; pratonton();
+      muat();
+    } catch (err) { toast(mesejRalat(err), 'ralat'); }
+    $('simpan').disabled = false;
+  };
+
+  $('senarai').onclick = async (e) => {
+    const b = e.target.closest('[data-padam]');
+    if (!b || !confirm('Padam makluman ini?')) return;
+    try { await buang('makluman', b.dataset.padam); toast('Makluman dipadam'); muat(); }
+    catch (err) { toast(mesejRalat(err), 'ralat'); }
+  };
+
+  muat();
+</script>
+</body>
+</html>

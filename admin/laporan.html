@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Laporan PDPR · Portal PDPR</title>
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#0f5c4d">
+  <link rel="icon" type="image/png" href="../assets/img/favicon.png">
+  <link rel="apple-touch-icon" href="../assets/img/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="PDPR CBA4082">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<main>
+  <div class="kepala tiada-cetak">
+    <div>
+      <h1>Laporan PDPR</h1>
+      <p class="lembut">Pematuhan guru, bahan dan kerja murid bagi julat tarikh. Eksport ke Excel atau cetak/PDF.</p>
+    </div>
+  </div>
+
+  <section class="kad tiada-cetak" style="margin-bottom:16px">
+    <div class="baris-medan" style="align-items:end">
+      <div class="medan" style="margin:0"><label for="dari">Dari</label><input type="date" id="dari"></div>
+      <div class="medan" style="margin:0"><label for="hingga">Hingga</label><input type="date" id="hingga"></div>
+      <div class="medan" style="margin:0">
+        <label for="paparan">Paparan</label>
+        <select id="paparan">
+          <option value="guru">Ikut guru</option>
+          <option value="kelas">Ikut kelas</option>
+          <option value="tarikh">Ikut tarikh</option>
+        </select>
+      </div>
+      <button class="btn" id="jana">Jana laporan</button>
+    </div>
+    <div class="butang-baris" style="margin-top:12px">
+      <button class="cip" data-pantas="minggu">Minggu ini</button>
+      <button class="cip" data-pantas="mlepas">Minggu lepas</button>
+      <button class="cip" data-pantas="bulan">Bulan ini</button>
+      <button class="cip" data-pantas="blepas">Bulan lepas</button>
+    </div>
+  </section>
+
+  <div id="hasil"><div class="kosong tiada-cetak"><div class="ikon">📊</div><p>Pilih julat tarikh dan tekan <b>Jana laporan</b>.</p></div></div>
+</main>
+
+<script type="module">
+  import { kawal } from '../assets/js/auth.js';
+  import { pasangApp, esc, ikon, namaCantik, hariIni, tambahHari, isninMinggu, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
+  import { muatJadualUntuk, kalendarPdpr, kelasTerlibat, bahanJulat, hantaranJulat, petaSiap, muatTetapan } from '../assets/js/data.js';
+  import { sesiHari, indeksHari, gabungKamus } from '../assets/js/jadual.js';
+
+  const sesiAuth = await kawal('admin');
+  await pasangApp('admin/laporan.html', sesiAuth);
+
+  const $ = (id) => document.getElementById(id);
+  const kini = hariIni();
+  const tetapanP = muatTetapan();
+  const HAD_HARI = 120;
+
+  // Julat pantas
+  const julat = {
+    minggu: () => [isninMinggu(kini), tambahHari(isninMinggu(kini), 4)],
+    mlepas: () => [tambahHari(isninMinggu(kini), -7), tambahHari(isninMinggu(kini), -3)],
+    bulan: () => [kini.slice(0, 8) + '01', kini],
+    blepas: () => {
+      const d = new Date(kini.slice(0, 8) + '01T00:00:00'); d.setDate(0);
+      const akhir = d.toLocaleDateString('en-CA');
+      return [akhir.slice(0, 8) + '01', akhir];
+    },
+  };
+  const p = new URLSearchParams(location.search);
+  [$('dari').value, $('hingga').value] = p.get('dari') && p.get('hingga') ? [p.get('dari'), p.get('hingga')] : julat.minggu();
+  if (p.get('v')) $('paparan').value = p.get('v');
+  document.querySelectorAll('[data-pantas]').forEach((b) => (b.onclick = () => { [$('dari').value, $('hingga').value] = julat[b.dataset.pantas](); jana(); }));
+
+  let laporan = null;
+
+  async function jana() {
+    const dari = $('dari').value, hingga = $('hingga').value, v = $('paparan').value;
+    if (!dari || !hingga || hingga < dari) return toast('Pilih julat tarikh yang sah', 'ralat');
+    const semua = [];
+    for (let t = dari; t <= hingga; t = tambahHari(t, 1)) if (indeksHari(t) >= 0) semua.push(t);
+    if (semua.length > HAD_HARI) return toast(`Julat terlalu panjang (maks ${HAD_HARI} hari bekerja)`, 'ralat');
+    history.replaceState(null, '', `?dari=${dari}&hingga=${hingga}&v=${v}`);
+    $('jana').disabled = true;
+    $('hasil').innerHTML = `<p class="memuat"><i class="pusing"></i> Menjana laporan…</p>`;
+
+    try {
+      const [status, bahan, hantaran, jMap, tetapan] = await Promise.all([
+        kalendarPdpr(dari, hingga, semua), bahanJulat(dari, hingga), hantaranJulat(dari, hingga).catch(() => []),
+        muatJadualUntuk(semua), tetapanP,
+      ]);
+      const K = gabungKamus(Object.values(jMap));
+      const hariPdpr = semua.filter((t) => status[t].aktif);
+      const siap = petaSiap(bahan);
+      const hantarSesi = {};
+      hantaran.forEach((h) => ((hantarSesi[h.tarikh + '|' + h.sesi] ??= []).push(h)));
+
+      // Kumpul setiap sesi PDPR
+      const rekod = []; // { t, s, ada, nHantar, murid:Set }
+      for (const t of hariPdpr) {
+        for (const s of sesiHari(jMap[t], indeksHari(t))) {
+          if (!kelasTerlibat(status[t], s.kelas)) continue;
+          const hs = hantarSesi[t + '|' + s.id] || [];
+          rekod.push({ t, s, ada: !!siap[t]?.has(s.id), nHantar: hs.length, murid: new Set(hs.map((h) => (h.namaMurid || '').trim().toUpperCase())) });
+        }
+      }
+
+      const baris = {};
+      const tambah = (k, r) => {
+        const b = (baris[k] ??= { sesi: 0, diisi: 0, hantar: 0, murid: new Set(), hari: new Set() });
+        b.sesi++; if (r.ada) b.diisi++; b.hantar += r.nHantar; b.hari.add(r.t);
+        r.murid.forEach((m) => b.murid.add(r.s.kelas + '|' + m));
+      };
+      for (const r of rekod) {
+        if (v === 'guru') r.s.guru.forEach((g) => tambah(g, r));
+        else if (v === 'kelas') tambah(r.s.kelas, r);
+        else tambah(r.t, r);
+      }
+      // Bilangan bahan
+      const bilBahan = {};
+      for (const b of bahan) {
+        if (!status[b.tarikh]?.aktif) continue;
+        const kunci = v === 'guru' ? [b.guruId] : v === 'kelas' ? (b.kelasIds || []) : [b.tarikh];
+        kunci.forEach((k) => (bilBahan[k] = (bilBahan[k] || 0) + 1));
+      }
+
+      const label = (k) => v === 'guru' ? namaCantik(K.guru[k]?.nama || k) : v === 'kelas' ? (K.kelas[k]?.nama || k) : formatTarikh(k, 'pendek');
+      const kod = (k) => v === 'guru' ? (K.guru[k]?.ringkas || '') : '';
+      const xs = Object.entries(baris).map(([k, b]) => ({ k, nama: label(k), kod: kod(k), ...b, pc: b.sesi ? Math.round((b.diisi / b.sesi) * 100) : 0, bahan: bilBahan[k] || 0, nMurid: b.murid.size }))
+        .sort((a, b) => v === 'tarikh' ? a.k.localeCompare(b.k) : v === 'kelas' ? a.nama.localeCompare(b.nama, 'ms', { numeric: true }) : a.pc - b.pc || a.nama.localeCompare(b.nama, 'ms'));
+
+      const tot = { sesi: rekod.length, diisi: rekod.filter((r) => r.ada).length, hantar: rekod.reduce((n, r) => n + r.nHantar, 0),
+        bahan: bahan.filter((b) => status[b.tarikh]?.aktif).length };
+      tot.pc = tot.sesi ? Math.round((tot.diisi / tot.sesi) * 100) : 0;
+      laporan = { dari, hingga, v, xs, tot, hariPdpr, tetapan };
+      lukis();
+    } catch (e) {
+      console.error(e);
+      $('hasil').innerHTML = `<div class="notis bahaya">Gagal menjana laporan: ${esc(mesejRalat(e))}</div>`;
+    }
+    $('jana').disabled = false;
+  }
+
+  const TAJUK = { guru: 'Guru', kelas: 'Kelas', tarikh: 'Tarikh' };
+
+  function lukis() {
+    const { dari, hingga, v, xs, tot, hariPdpr, tetapan } = laporan;
+    const julatTeks = `${formatTarikh(dari)} hingga ${formatTarikh(hingga)}`;
+    if (!hariPdpr.length) {
+      $('hasil').innerHTML = `<div class="kosong"><div class="ikon">📭</div><p>Tiada hari PDPR dalam julat ini.</p></div>`;
+      return;
+    }
+    $('hasil').innerHTML = `
+      <div class="butang-baris tiada-cetak" style="margin:0 0 14px">
+        <button class="btn" id="excel">${ikon('fail', 18)} Muat turun Excel</button>
+        <button class="btn kedua" id="cetak">Cetak / Simpan PDF</button>
+      </div>
+
+      <div class="kepala-surat cetak-sahaja">
+        ${tetapan.logo ? `<img src="${esc(tetapan.logo)}" alt="">` : ''}
+        <div><b>${esc(tetapan.nama)}</b>${tetapan.kod ? `<span>Kod sekolah: ${esc(tetapan.kod)}</span>` : ''}</div>
+      </div>
+      <h2 class="tajuk-laporan">Laporan Pelaksanaan PDPR — Ikut ${TAJUK[v]}</h2>
+      <p class="lembut" style="margin-top:0">${esc(julatTeks)} · ${hariPdpr.length} hari PDPR</p>
+
+      <div class="statistik">
+        <div class="stat"><small>Sesi PDPR</small><b>${tot.sesi}</b></div>
+        <div class="stat"><small>Sesi diisi</small><b>${tot.diisi}</b></div>
+        <div class="stat"><small>Pematuhan</small><b>${tot.pc}%</b></div>
+        <div class="stat"><small>Bahan dimuat naik</small><b>${tot.bahan}</b></div>
+        <div class="stat"><small>Hantaran kerja murid</small><b>${tot.hantar}</b></div>
+      </div>
+
+      <div class="balut-jadual">
+        <table class="jadual-data jadual-laporan">
+          <thead><tr><th>Bil</th><th>${TAJUK[v]}</th>${v === 'guru' ? '<th>Kod</th>' : ''}<th>Hari</th><th>Sesi</th><th>Diisi</th><th>%</th><th>Bahan</th><th>Hantaran murid</th>${v !== 'guru' ? '<th>Murid unik</th>' : ''}</tr></thead>
+          <tbody>${xs.map((x, i) => `<tr>
+            <td>${i + 1}</td><td><b>${esc(x.nama)}</b></td>${v === 'guru' ? `<td>${esc(x.kod)}</td>` : ''}
+            <td>${x.hari.size}</td><td>${x.sesi}</td><td>${x.diisi}</td>
+            <td><span class="lencana ${x.pc === 100 ? '' : x.pc >= 50 ? 'amaran' : 'bahaya'}">${x.pc}%</span></td>
+            <td>${x.bahan}</td><td>${x.hantar}</td>${v !== 'guru' ? `<td>${x.nMurid}</td>` : ''}
+          </tr>`).join('')}</tbody>
+          <tfoot><tr><td></td><td><b>Jumlah</b></td>${v === 'guru' ? '<td></td>' : ''}<td>${hariPdpr.length}</td><td><b>${tot.sesi}</b></td><td><b>${tot.diisi}</b></td><td><b>${tot.pc}%</b></td><td><b>${tot.bahan}</b></td><td><b>${tot.hantar}</b></td>${v !== 'guru' ? '<td></td>' : ''}</tr></tfoot>
+        </table>
+      </div>
+      ${v === 'guru' ? '<p class="bantuan">Sesi dikongsi (cth Tasmik, PI/PM) dikira untuk setiap guru dalam sesi tersebut.</p>' : ''}
+
+      <div class="tandatangan cetak-sahaja">
+        <div><span>Disediakan oleh:</span><i></i><small>Nama:</small><small>Jawatan:</small><small>Tarikh:</small></div>
+        <div><span>Disahkan oleh:</span><i></i><small>Nama:</small><small>Jawatan:</small><small>Tarikh:</small></div>
+      </div>
+      <p class="cetak-sahaja kecil lembut">Dijana daripada Portal PDPR pada ${esc(new Date().toLocaleString('ms-MY'))}</p>`;
+
+    $('cetak').onclick = () => window.print();
+    $('excel').onclick = eksportExcel;
+  }
+
+  // ---------- Excel (SheetJS dimuat hanya bila diperlukan) ----------
+  function muatSkrip(src) {
+    return new Promise((ok, gagal) => {
+      if (window.XLSX) return ok();
+      const s = document.createElement('script');
+      s.src = src; s.onload = ok; s.onerror = () => gagal(new Error('Gagal memuatkan modul Excel. Semak sambungan internet.'));
+      document.head.append(s);
+    });
+  }
+  async function eksportExcel() {
+    const btn = $('excel');
+    btn.disabled = true;
+    try {
+      await muatSkrip('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+      const { dari, hingga, v, xs, tot, hariPdpr, tetapan } = laporan;
+      const kepala = ['Bil', TAJUK[v], ...(v === 'guru' ? ['Kod'] : []), 'Hari PDPR', 'Sesi', 'Diisi', 'Pematuhan (%)', 'Bahan', 'Hantaran murid', ...(v !== 'guru' ? ['Murid unik'] : [])];
+      const data = xs.map((x, i) => [i + 1, x.nama, ...(v === 'guru' ? [x.kod] : []), x.hari.size, x.sesi, x.diisi, x.pc, x.bahan, x.hantar, ...(v !== 'guru' ? [x.nMurid] : [])]);
+      const aoa = [
+        [tetapan.nama], [`Laporan Pelaksanaan PDPR — Ikut ${TAJUK[v]}`], [`${dari} hingga ${hingga} (${hariPdpr.length} hari PDPR)`], [],
+        kepala, ...data,
+        ['', 'Jumlah', ...(v === 'guru' ? [''] : []), hariPdpr.length, tot.sesi, tot.diisi, tot.pc, tot.bahan, tot.hantar],
+        [], ['Disediakan oleh:', '', '', 'Disahkan oleh:'], [], ['Nama:', '', '', 'Nama:'], ['Jawatan:', '', '', 'Jawatan:'], ['Tarikh:', '', '', 'Tarikh:'],
+      ];
+      const ws = window.XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = kepala.map((h, i) => ({ wch: i === 1 ? 38 : Math.max(8, h.length + 2) }));
+      const wb = window.XLSX.utils.book_new();
+      window.XLSX.utils.book_append_sheet(wb, ws, 'Laporan');
+      window.XLSX.writeFile(wb, `Laporan_PDPR_${TAJUK[v]}_${dari}_${hingga}.xlsx`);
+    } catch (e) { toast(mesejRalat(e), 'ralat'); }
+    btn.disabled = false;
+  }
+
+  $('jana').onclick = jana;
+  if (p.get('dari')) jana();
+</script>
+</body>
+</html>

@@ -4,6 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Kerja Murid · Portal PDPR</title>
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#0f5c4d">
+  <link rel="icon" type="image/png" href="../assets/img/favicon.png">
+  <link rel="apple-touch-icon" href="../assets/img/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="PDPR CBA4082">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <link rel="stylesheet" href="../assets/css/style.css">
 </head>
 <body>
@@ -25,8 +32,8 @@
 </main>
 
 <script type="module">
-  import { kawal, adalahAdmin } from '../assets/js/auth.js';
-  import { pasangApp, esc, ikon, hariIni, hariBekerja, tambahHari, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
+  import { kawal, adalahAdmin, guruDilihat } from '../assets/js/auth.js';
+  import { pasangApp, pasangJalurLihat, namaCantik, esc, ikon, hariIni, hariBekerja, tambahHari, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
   import { muatJadual, statusPdpr, kelasTerlibat, hantaranJulat, muatTetapan, buang } from '../assets/js/data.js';
   import { sesiHari, indeksHari, labelWaktu } from '../assets/js/jadual.js';
   import { bukaKerjaMurid, buangFail } from '../assets/js/upload.js';
@@ -34,6 +41,8 @@
   const sesiAuth = await kawal('guru');
   await pasangApp('guru/kerja.html', sesiAuth);
   const { profil } = sesiAuth;
+  const LIHAT = guruDilihat(profil);          // Pantau Guru (admin, lihat sahaja)
+  const GID = LIHAT || profil.guruId;
 
   const $ = (id) => document.getElementById(id);
   $('sebelum').innerHTML = ikon('kiri', 18);
@@ -45,7 +54,10 @@
 
   // Admin boleh lihat ikut kelas; guru lihat sesi sendiri
   const admin = adalahAdmin(profil);
-  if (admin) {
+  if (LIHAT) {
+    const jl = await muatJadual();
+    pasangJalurLihat(LIHAT, namaCantik(jl.guru[LIHAT]?.nama || LIHAT), 'kerja');
+  } else if (admin) {
     const j = await muatJadual();
     const ks = Object.entries(j.kelas).sort((a, b) => a[1].nama.localeCompare(b[1].nama, 'ms', { numeric: true }));
     $('kelas').innerHTML = (profil.guruId ? `<option value="">Sesi saya</option>` : `<option value="">— Pilih kelas —</option>`) +
@@ -59,16 +71,16 @@
 
   async function muat() {
     const t = $('tarikh').value, kelasId = $('kelas').value || '';
-    history.replaceState(null, '', `?t=${t}${kelasId ? '&k=' + kelasId : ''}`);
+    history.replaceState(null, '', `?t=${t}${kelasId ? '&k=' + kelasId : ''}${LIHAT ? '&lihat=' + encodeURIComponent(LIHAT) : ''}`);
     const h = indeksHari(t);
     $('statistik').innerHTML = '';
     if (h < 0) { $('isi').innerHTML = `<div class="kosong"><div class="ikon">🌤️</div><p>Hujung minggu.</p></div>`; return; }
-    if (!kelasId && !profil.guruId) { $('isi').innerHTML = `<div class="kosong"><p>Pilih kelas.</p></div>`; return; }
+    if (!kelasId && !GID) { $('isi').innerHTML = `<div class="kosong"><p>Pilih kelas.</p></div>`; return; }
     $('isi').innerHTML = `<p class="memuat">Memuatkan…</p>`;
 
-    const [jd, status, hantaran] = await Promise.all([muatJadual(t), statusPdpr(t), hantaranJulat(t, t)]);
+    const [jd, status, hantaran] = await Promise.all([muatJadual(t), statusPdpr(t), hantaranJulat(t, t, kelasId ? null : GID)]);
     data = hantaran;
-    const sesi = sesiHari(jd, h, kelasId ? { kelasId } : { guruId: profil.guruId }).filter((s) => kelasTerlibat(status, s.kelas));
+    const sesi = sesiHari(jd, h, kelasId ? { kelasId } : { guruId: GID }).filter((s) => kelasTerlibat(status, s.kelas));
     if (!status.aktif || !sesi.length) {
       $('isi').innerHTML = `<div class="kosong"><div class="ikon">📭</div><p>${status.aktif ? 'Tiada sesi PDPR untuk dipaparkan.' : 'Bukan hari PDPR.'}</p></div>`;
       return;
@@ -100,7 +112,9 @@
             <td><b>${esc(xs[0].namaMurid)}</b><div class="kecil lembut">${masaPendek(xs[0].masa)}</div></td>
             <td data-label="Kerja">${xs.map((x) => `<span class="kerja-item">${x.jenis === 'pautan'
               ? `<a href="${esc(x.url)}" target="_blank" rel="noopener" class="btn kedua kecil">${ikon('pautan', 14)} Pautan</a>`
-              : `<button class="btn kedua kecil" data-fail="${esc(x.fileId)}" title="${esc(x.namaFail)}">${ikon('fail', 14)} ${esc((x.namaFail || 'Fail').slice(0, 22))}</button>`}<button class="btn bahaya kecil" data-padam="${esc(x.id)}" title="Padam (tersalah hantar)" aria-label="Padam ${esc(x.namaFail || 'pautan')} oleh ${esc(x.namaMurid)}">${ikon('sampah', 14)}</button></span>`).join('')}</td>
+              : x.thumb
+                ? `<button class="kerja-thumb" data-fail="${esc(x.fileId)}" title="Buka ${esc(x.namaFail)}" aria-label="Buka ${esc(x.namaFail)}"><img src="${x.thumb}" alt=""></button>`
+                : `<button class="btn kedua kecil" data-fail="${esc(x.fileId)}" title="${esc(x.namaFail)}">${ikon('fail', 14)} ${esc((x.namaFail || 'Fail').slice(0, 22))}</button>`}<button class="btn bahaya kecil hanya-pemilik" data-padam="${esc(x.id)}" title="Padam (tersalah hantar)" aria-label="Padam ${esc(x.namaFail || 'pautan')} oleh ${esc(x.namaMurid)}">${ikon('sampah', 14)}</button></span>`).join('')}</td>
             <td data-label="Catatan" class="kecil">${esc([...new Set(xs.map((x) => x.catatan).filter(Boolean))].join(' · ') || '—')}</td>
           </tr>`).join('')}</tbody></table></div>`
           : `<p class="belum-teks" style="margin:0">Belum ada kerja dihantar.</p>`}
@@ -112,12 +126,12 @@
   // Buka fail peribadi melalui Apps Script
   $('isi').onclick = async (e) => {
     const p = e.target.closest('[data-padam]');
-    if (p) return padam(p);
+    if (p) return LIHAT ? undefined : padam(p);
     const b = e.target.closest('[data-fail]');
     if (!b) return;
     const tetingkap = window.open('', '_blank'); // buka segera (elak penyekat pop-up)
     const asal = b.innerHTML;
-    b.disabled = true; b.textContent = 'Membuka…';
+    b.disabled = true; if (!b.classList.contains('kerja-thumb')) b.textContent = 'Membuka…';
     try {
       const blob = await bukaKerjaMurid(b.dataset.fail, (await tetapanP).appsScriptUrl);
       const url = URL.createObjectURL(blob);

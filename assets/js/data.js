@@ -48,16 +48,63 @@ export async function ambil(kol, id) {
   return s.exists() ? { id: s.id, ...s.data() } : null;
 }
 
-/** @param {Array<[string,string,any]>} tapis */
-export async function senarai(kol, tapis = []) {
+// ---------- Cache bacaan (jimat kuota Firestore) ----------
+// Hasil senarai() disimpan 90 saat dalam tab ini (memori + sessionStorage, merentas halaman).
+// Sebarang tulisan oleh pengguna ini mengosongkan cache supaya paparan sentiasa terkini.
+const CACHE_TTL = 90 * 1000;
+const PRA_Q = 'pdpr-q:';
+const memori = new Map();
+export function bersihCache() {
+  memori.clear();
+  try { Object.keys(sessionStorage).filter((k) => k.startsWith(PRA_Q)).forEach((k) => sessionStorage.removeItem(k)); } catch {}
+}
+function cacheAmbil(k) {
+  const m = memori.get(k);
+  if (m && Date.now() - m.t < CACHE_TTL) return m.d;
+  try {
+    const c = JSON.parse(sessionStorage.getItem(PRA_Q + k) || 'null');
+    if (c && Date.now() - c.t < CACHE_TTL) { memori.set(k, c); return c.d; }
+  } catch {}
+  return null;
+}
+function cacheSimpan(k, d) {
+  const c = { t: Date.now(), d };
+  memori.set(k, c);
+  try { sessionStorage.setItem(PRA_Q + k, JSON.stringify(c)); } catch {}
+}
+
+/**
+ * @param {Array<[string,string,any]>} tapis
+ * @param {{segar?: boolean}} pilihan  segar = abaikan cache
+ */
+export async function senarai(kol, tapis = [], { segar = false } = {}) {
   const fb = await firebase();
   if (!fb) return Object.entries(demoBaca(kol)).map(([id, d]) => ({ id, ...d })).filter((d) => tapis.every((t) => padan(d, t)));
+  const kunci = kol + JSON.stringify(tapis);
+  if (!segar) { const c = cacheAmbil(kunci); if (c) return c; }
   const q = fb.fs.query(fb.fs.collection(fb.db, kol), ...tapis.map(([m, o, v]) => fb.fs.where(m, o, v)));
   const r = await fb.fs.getDocs(q);
-  return r.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const hasil = r.docs.map((d) => ({ id: d.id, ...d.data() }));
+  cacheSimpan(kunci, hasil);
+  return hasil;
+}
+
+/**
+ * Pertanyaan bersasar (cth hanya bahan kelas/guru tertentu) yang memerlukan indeks komposit.
+ * Jika indeks belum dicipta, guna pertanyaan umum dan tapis di browser (tetap berfungsi, cuma lebih banyak bacaan).
+ */
+async function senaraiBersasar(kol, tapisSasar, tapisUmum, saring) {
+  try {
+    return await senarai(kol, tapisSasar);
+  } catch (e) {
+    if (!String(e?.code || '').includes('failed-precondition')) throw e;
+    console.warn(`[PDPR] Indeks Firestore untuk "${kol}" belum dicipta — guna pertanyaan umum. Cipta indeks melalui pautan ini:`, e.message);
+    return (await senarai(kol, tapisUmum)).filter(saring);
+  }
 }
 
 export async function tulis(kol, id, data, gabung = false) {
+  bersihCache();
   const fb = await firebase();
   if (!fb) { const s = demoBaca(kol); s[id] = gabung ? { ...(s[id] || {}), ...data } : data; demoTulis(kol, s); return id; }
   await fb.fs.setDoc(fb.fs.doc(fb.db, kol, id), data, { merge: gabung });
@@ -65,6 +112,7 @@ export async function tulis(kol, id, data, gabung = false) {
 }
 
 export async function tambah(kol, data) {
+  bersihCache();
   const fb = await firebase();
   if (!fb) return tulis(kol, idRawak(), data);
   const r = await fb.fs.addDoc(fb.fs.collection(fb.db, kol), data);
@@ -72,6 +120,7 @@ export async function tambah(kol, data) {
 }
 
 export async function buang(kol, id) {
+  bersihCache();
   const fb = await firebase();
   if (!fb) { const s = demoBaca(kol); delete s[id]; demoTulis(kol, s); return; }
   await fb.fs.deleteDoc(fb.fs.doc(fb.db, kol, id));
@@ -79,6 +128,7 @@ export async function buang(kol, id) {
 
 /** Tulis beberapa dokumen serentak (atomik di Firestore). ops: [{kol,id,data}|{kol,id,padam:true}] */
 export async function kelompok(ops) {
+  bersihCache();
   const fb = await firebase();
   if (!fb) { for (const o of ops) o.padam ? await buang(o.kol, o.id) : await tulis(o.kol, o.id, o.data); return; }
   const b = fb.fs.writeBatch(fb.db);
@@ -306,16 +356,37 @@ export async function bahanTarikh(tarikh) {
   return (await senarai('uploads', [['tarikh', '==', tarikh]])).sort(susunMasa);
 }
 
+/** Bahan satu kelas pada satu tarikh (indeks: uploads · kelasIds array-contains + tarikh) */
 export async function bahanKelas(tarikh, kelasId) {
-  return (await bahanTarikh(tarikh)).filter((b) => (b.kelasIds || []).includes(kelasId));
+  return (await senaraiBersasar('uploads',
+    [['kelasIds', 'array-contains', kelasId], ['tarikh', '==', tarikh]],
+    [['tarikh', '==', tarikh]],
+    (b) => (b.kelasIds || []).includes(kelasId))).sort(susunMasa);
 }
 
-export async function bahanJulat(dari, hingga) {
-  return (await senarai('uploads', [['tarikh', '>=', dari], ['tarikh', '<=', hingga]])).sort(susunMasa);
+/**
+ * Bahan dalam julat tarikh. Dengan guruId: hanya sesi guru itu
+ * (indeks: uploads · guruIds array-contains + tarikh) — jauh lebih jimat untuk Jadual Saya.
+ */
+export async function bahanJulat(dari, hingga, guruId = null) {
+  const julat = [['tarikh', '>=', dari], ['tarikh', '<=', hingga]];
+  if (!guruId) return (await senarai('uploads', julat)).sort(susunMasa);
+  return (await senaraiBersasar('uploads', [['guruIds', 'array-contains', guruId], ...julat], julat,
+    (b) => (b.guruIds || []).includes(guruId))).sort(susunMasa);
 }
 
 export async function bahanSaya(uid) {
   return (await senarai('uploads', [['uid', '==', uid]])).sort((a, b) => b.tarikh.localeCompare(a.tarikh) || susunMasa(a, b));
+}
+
+/**
+ * Semua bahan berkaitan seorang guru (Pantau Guru):
+ * bahan untuk sesinya (termasuk oleh guru ganti) + bahan yang dia muat naik bagi pihak guru lain.
+ */
+export async function bahanGuru(guruId) {
+  const [a, b] = await Promise.all([senarai('uploads', [['guruId', '==', guruId]]), senarai('uploads', [['olehGuruId', '==', guruId]])]);
+  const peta = new Map([...a, ...b].map((x) => [x.id, x]));
+  return [...peta.values()].sort((x, y) => y.tarikh.localeCompare(x.tarikh) || susunMasa(x, y));
 }
 
 export const tambahBahan = (data) => tambah('uploads', { ...data, masa: new Date().toISOString() });
@@ -335,9 +406,13 @@ export function petaSiap(bahan) {
 // ------------------------------------------------------------
 export const tambahHantaran = (data) => tambah('hantaran', { ...data, masa: new Date().toISOString() });
 
-export async function hantaranJulat(dari, hingga) {
-  return (await senarai('hantaran', [['tarikh', '>=', dari], ['tarikh', '<=', hingga]]))
-    .sort((a, b) => (a.masa || '').localeCompare(b.masa || ''));
+/** Kerja murid dalam julat tarikh. Dengan guruId: hanya sesi guru itu (indeks: hantaran · guruIds array-contains + tarikh) */
+export async function hantaranJulat(dari, hingga, guruId = null) {
+  const julat = [['tarikh', '>=', dari], ['tarikh', '<=', hingga]];
+  const xs = guruId
+    ? await senaraiBersasar('hantaran', [['guruIds', 'array-contains', guruId], ...julat], julat, (h) => (h.guruIds || []).includes(guruId))
+    : await senarai('hantaran', julat);
+  return xs.sort((a, b) => (a.masa || '').localeCompare(b.masa || ''));
 }
 
 /** Bilangan murid unik yang menghantar bagi setiap tarikh+sesi → { 'tarikh|sesi': n } */
@@ -345,4 +420,15 @@ export function kiraHantaran(senaraiHantaran) {
   const m = {};
   for (const h of senaraiHantaran) (m[h.tarikh + '|' + h.sesi] ??= new Set()).add((h.namaMurid || '').trim().toUpperCase());
   return Object.fromEntries(Object.entries(m).map(([k, v]) => [k, v.size]));
+}
+
+// ------------------------------------------------------------
+//  Makluman / pengumuman
+//    makluman/{id} { teks, sasaran:'awam'|'guru'|'semua', jenis:'info'|'penting', mula, tamat, masa, oleh }
+// ------------------------------------------------------------
+export async function maklumanAktif(sasaran) {
+  const t = tarikhKini();
+  const xs = await senarai('makluman').catch(() => []);
+  return xs.filter((m) => (m.sasaran === 'semua' || m.sasaran === sasaran) && (!m.mula || m.mula <= t) && (!m.tamat || m.tamat >= t))
+    .sort((a, b) => (a.jenis === 'penting' ? -1 : 0) - (b.jenis === 'penting' ? -1 : 0) || (b.masa || '').localeCompare(a.masa || ''));
 }

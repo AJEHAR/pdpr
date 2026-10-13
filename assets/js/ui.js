@@ -28,6 +28,8 @@ export const formatTarikh = (t, gaya = 'panjang') =>
 const P = {
   blok: '<rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M12 3l4.5 7.5h-9z"/>',
   murid: '<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/><path d="M12 4v3"/>',
+  mata: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  loceng: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
   grid: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
   rumah: '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
   kalendar: '<rect x="3" y="4.5" width="18" height="16.5" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/>',
@@ -52,7 +54,7 @@ export const ikon = (n, saiz = 20) =>
   `<svg class="ik" width="${saiz}" height="${saiz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ''}</svg>`;
 
 // ---------- Jenama (nama & logo dari tetapan) ----------
-const logoAsal = akar + 'assets/img/logo.svg';
+const logoAsal = akar + 'assets/img/logo-sekolah.png';
 const htmlJenama = (t) => `
   <img class="jenama-logo" src="${esc(t.logo || logoAsal)}" alt="">
   <span class="jenama-teks"><b>${esc(t.ringkas || 'PDPR')}</b><small>${esc(t.nama)}</small></span>`;
@@ -95,6 +97,8 @@ export function pasangRangka(aktif) {
   f.innerHTML = `© ${new Date().getFullYear()} <span data-nama-sekolah></span> · Portal Pembelajaran Di Rumah`;
   document.body.append(f);
   pasangJenama();
+  pasangMakluman('awam').catch(() => {});
+  daftarSW();
 }
 
 // ---------- Rangka app (guru / admin) ----------
@@ -119,14 +123,18 @@ export async function pasangApp(aktif, { u, profil }) {
     ? [
         { href: 'admin/index.html', label: 'Papan Pemuka', pendek: 'Papan', ikon: 'carta' },
         { href: 'admin/kalendar.html', label: 'Kalendar PDPR', pendek: 'Kalendar', ikon: 'kalendar' },
+        { href: 'admin/pantau.html', label: 'Pantau Guru', pendek: 'Pantau', ikon: 'mata' },
+        { href: 'admin/laporan.html', label: 'Laporan', pendek: 'Laporan', ikon: 'carta' },
         { href: 'admin/jadual.html', label: 'Jadual Waktu', pendek: 'Jadual', ikon: 'grid' },
         { href: 'admin/prasekolah.html', label: 'Prasekolah', pendek: 'Pra', ikon: 'blok' },
         { href: 'admin/pengguna.html', label: 'Pengguna', pendek: 'Pengguna', ikon: 'pengguna' },
+        { href: 'admin/makluman.html', label: 'Makluman', pendek: 'Makluman', ikon: 'loceng' },
         { href: 'admin/tetapan.html', label: 'Tetapan', pendek: 'Tetapan', ikon: 'tetapan' },
       ]
     : [];
   const awam = [{ href: 'index.html', label: 'Laman Awam', pendek: 'Awam', ikon: 'dunia' }];
 
+  if (new URLSearchParams(location.search).get('lihat') && adalahAdmin(profil)) aktif = 'admin/pantau.html';
   const pautan = (m, kelas = '') =>
     `<a class="${kelas}" href="${akar}${m.href}" ${m.href === aktif ? 'aria-current="page"' : ''}>${ikon(m.ikon)}<span>${m.label}</span></a>`;
 
@@ -190,6 +198,8 @@ export async function pasangApp(aktif, { u, profil }) {
   helaian.querySelectorAll('[data-tutup]').forEach((e) => (e.onclick = () => (helaian.hidden = true)));
   document.querySelectorAll('[data-keluar]').forEach((b) => (b.onclick = logKeluar));
 
+  pasangMakluman('guru').catch(() => {});
+  daftarSW();
   if (profil.status === 'menunggu') {
     main.insertAdjacentHTML('afterbegin', `<div class="notis amaran"><b>Akaun menunggu kelulusan admin.</b> Anda boleh melihat jadual, tetapi belum boleh memuat naik bahan.</div>`);
   }
@@ -218,4 +228,105 @@ export function mesejRalat(e) {
   if (k === 'auth/admin-restricted-operation' || k === 'auth/operation-not-allowed')
     return 'Sistem hantar kerja belum diaktifkan oleh sekolah. Sila maklumkan kepada guru.';
   return e?.message || String(e);
+}
+
+// ---------- Pantau Guru: jalur "lihat sahaja" dengan tab ----------
+/**
+ * @param {string} guruId
+ * @param {string} nama   nama guru
+ * @param {'jadual'|'bahan'|'kerja'} tab
+ */
+export function pasangJalurLihat(guruId, nama, tab) {
+  const q = (h) => `${akar}guru/${h}?lihat=${encodeURIComponent(guruId)}`;
+  const T = [['jadual', 'index.html', 'Jadual', 'kalendar'], ['bahan', 'rekod.html', 'Bahan diupload', 'senarai'], ['kerja', 'kerja.html', 'Kerja murid', 'murid']];
+  const el = document.createElement('div');
+  el.className = 'jalur-lihat';
+  el.innerHTML = `
+    <div class="jl-atas">
+      <a class="btn kedua kecil" href="${akar}admin/pantau.html">${ikon('kiri', 16)} Senarai guru</a>
+      <span class="jl-teks">${ikon('mata', 18)} <span>Melihat sebagai <b>${esc(nama)}</b></span></span>
+      <span class="lencana amaran">Lihat sahaja</span>
+    </div>
+    <nav class="tab-segmen jl-tab">${T.map(([k, h, l, i]) => `<a href="${q(h)}" ${k === tab ? 'aria-selected="true"' : ''}>${ikon(i, 16)} ${l}</a>`).join('')}</nav>`;
+  document.querySelector('main').prepend(el);
+  document.body.classList.add('mod-lihat');
+}
+
+// ---------- Makluman (jalur pengumuman) ----------
+const KUNCI_TUTUP = 'pdpr-makluman-tutup';
+export async function pasangMakluman(sasaran) {
+  const { maklumanAktif } = await import('./data.js');
+  let tutup = [];
+  try { tutup = JSON.parse(localStorage.getItem(KUNCI_TUTUP) || '[]'); } catch {}
+  const xs = (await maklumanAktif(sasaran)).filter((m) => !tutup.includes(m.id));
+  if (!xs.length) return;
+  const el = document.createElement('div');
+  el.className = 'makluman-bekas';
+  el.innerHTML = xs.map((m) => `
+    <div class="makluman ${m.jenis === 'penting' ? 'penting' : ''}" data-id="${esc(m.id)}" role="status">
+      <span class="mk-ikon" aria-hidden="true">${m.jenis === 'penting' ? '!' : 'i'}</span>
+      <span class="mk-teks">${esc(m.teks)}</span>
+      <button class="ik-btn" data-tutup-mk aria-label="Tutup makluman">${ikon('tutup', 16)}</button>
+    </div>`).join('');
+  document.querySelector('main').prepend(el);
+  el.onclick = (e) => {
+    const b = e.target.closest('[data-tutup-mk]');
+    if (!b) return;
+    const kad = b.closest('[data-id]');
+    tutup.push(kad.dataset.id);
+    try { localStorage.setItem(KUNCI_TUTUP, JSON.stringify(tutup.slice(-50))); } catch {}
+    kad.remove();
+  };
+}
+
+// ---------- PWA: service worker & butang "Pasang aplikasi" ----------
+let promptPasang = null;
+const sudahDipasang = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const iOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+export function daftarSW() {
+  if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
+  navigator.serviceWorker.register(akar + 'sw.js').catch((e) => console.warn('SW gagal', e));
+}
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  promptPasang = e;
+  document.querySelectorAll('[data-pasang]').forEach((b) => (b.hidden = false));
+});
+window.addEventListener('appinstalled', () => document.querySelectorAll('[data-pasang]').forEach((b) => (b.hidden = true)));
+
+/** Pasang tingkah laku pada butang [data-pasang] (tersembunyi jika sudah dipasang / tidak disokong) */
+export function pasangButangPasang() {
+  document.querySelectorAll('[data-pasang]').forEach((b) => {
+    b.hidden = sudahDipasang() || !(promptPasang || iOS());
+    b.onclick = async () => {
+      if (promptPasang) {
+        promptPasang.prompt();
+        const r = await promptPasang.userChoice.catch(() => null);
+        if (r?.outcome === 'accepted') b.hidden = true;
+        promptPasang = null;
+        return;
+      }
+      const el = document.createElement('div');
+      el.className = 'helaian borang-kerja';
+      el.innerHTML = `
+        <div class="helaian-latar" data-tutup></div>
+        <div class="helaian-isi" role="dialog" aria-label="Pasang aplikasi">
+          <div class="helaian-pegang"></div>
+          <div style="display:flex;gap:14px;align-items:center;margin-bottom:12px">
+            <img src="${akar}assets/img/apple-touch-icon.png" alt="" style="width:56px;height:56px;border-radius:14px;border:1px solid var(--garis)">
+            <div><h2 style="margin:0">Pasang PDPR CBA4082</h2><p class="lembut kecil" style="margin:2px 0 0">Buka portal terus dari skrin utama iPhone/iPad.</p></div>
+          </div>
+          <ol style="padding-left:20px;line-height:1.7;margin:0 0 14px">
+            <li>Pastikan dibuka dalam <b>Safari</b>.</li>
+            <li>Tekan butang <b>Kongsi</b> (petak dengan anak panah ke atas) di bawah skrin.</li>
+            <li>Tatal dan pilih <b>Add to Home Screen / Tambah ke Skrin Utama</b>.</li>
+            <li>Tekan <b>Add / Tambah</b>.</li>
+          </ol>
+          <button class="btn penuh" data-tutup>Faham</button>
+        </div>`;
+      document.body.append(el);
+      el.onclick = (e) => { if (e.target.closest('[data-tutup]')) el.remove(); };
+    };
+  });
 }

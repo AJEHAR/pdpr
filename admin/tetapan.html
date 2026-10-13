@@ -4,6 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tetapan · Portal PDPR</title>
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#0f5c4d">
+  <link rel="icon" type="image/png" href="../assets/img/favicon.png">
+  <link rel="apple-touch-icon" href="../assets/img/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="PDPR CBA4082">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <link rel="stylesheet" href="../assets/css/style.css">
 </head>
 <body>
@@ -28,7 +35,7 @@
       <div class="kad">
         <h2>Logo sekolah</h2>
         <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">
-          <img class="pratonton-logo" id="pratonton" src="../assets/img/logo.svg" alt="Logo">
+          <img class="pratonton-logo" id="pratonton" src="../assets/img/logo-sekolah.png" alt="Logo">
           <div>
             <div class="butang-baris" style="margin-top:0">
               <label class="btn kedua" style="margin:0">Pilih gambar<input type="file" id="in-logo" accept="image/*" hidden></label>
@@ -51,6 +58,10 @@
         <div class="butang-baris" style="margin-top:0"><button type="button" class="btn kedua kecil" id="uji">Uji sambungan</button></div>
         <div id="hasil-uji" style="margin-top:10px"></div>
         <div class="medan" style="margin-top:14px"><label for="had">Had saiz fail (MB)</label><input type="number" id="had" min="1" max="25" step="1"></div>
+      </div>
+      <div class="kad ruang-drive">
+        <h2>Ruang Google Drive</h2>
+        <div id="ruang"><p class="lembut kecil">Isi URL Apps Script untuk melihat penggunaan ruang.</p></div>
       </div>
       <div class="kad">
         <h2>Jadual waktu</h2>
@@ -100,7 +111,24 @@
       $('pratonton').src = logo;
     } catch { toast('Gambar tidak dapat dibaca', 'ralat'); }
   };
-  $('buang-logo').onclick = () => { logo = ''; $('pratonton').src = '../assets/img/logo.svg'; };
+  $('buang-logo').onclick = () => { logo = ''; $('pratonton').src = '../assets/img/logo-sekolah.png'; };
+
+  // Ruang Drive (akaun Gmail yang menjalankan Apps Script)
+  const GB = (b) => (b / 1073741824).toFixed(b < 1073741824 ? 2 : 1) + ' GB';
+  function paparRuang(r) {
+    const st = r?.storan;
+    if (!st || st.guna == null) { $('ruang').innerHTML = `<p class="lembut kecil">Maklumat ruang belum tersedia. Kemas kini Apps Script ke versi terbaru.</p>`; return; }
+    const pc = st.had ? Math.min(100, Math.round((st.guna / st.had) * 100)) : 0;
+    const warna = pc >= 90 ? 'var(--bahaya)' : pc >= 80 ? 'var(--aksen)' : 'var(--utama-2)';
+    $('ruang').innerHTML = `
+      <p style="margin:0 0 6px"><b>${GB(st.guna)}</b> daripada ${st.had ? GB(st.had) : 'tanpa had'} digunakan <span class="lembut">(${pc}%)</span></p>
+      <div class="bar-maju"><i style="width:${pc}%;background:${warna}"></i></div>
+      ${pc >= 80 ? `<div class="notis amaran" style="margin:10px 0 0">Ruang hampir penuh. Padam fail lama dalam folder PDPR, kosongkan Trash, atau naik taraf storan Google.</div>` : ''}
+      <p class="bantuan">Ruang ini dikongsi dengan Gmail &amp; Google Photos akaun tersebut. ${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">Buka folder PDPR →</a>` : ''}</p>`;
+  }
+  if (t.appsScriptUrl) ujiAppsScript(t.appsScriptUrl).then(paparRuang).catch(() => {
+    $('ruang').innerHTML = `<p class="lembut kecil">Tidak dapat menghubungi Apps Script.</p>`;
+  });
 
   $('uji').onclick = async () => {
     const url = $('url').value.trim();
@@ -109,7 +137,7 @@
     try {
       const r = await ujiAppsScript(url);
       $('hasil-uji').innerHTML = r.ok
-        ? `<div class="notis info" style="margin:0">✓ Bersambung. Folder Drive: <b>${esc(r.folder || '-')}</b></div>`
+        ? (paparRuang(r), `<div class="notis info" style="margin:0">✓ Bersambung. Folder Drive: <b>${esc(r.folder || '-')}</b></div>`)
         : `<div class="notis bahaya" style="margin:0">${esc(r.ralat || 'Respons tidak dijangka')}</div>`;
     } catch (e) {
       $('hasil-uji').innerHTML = `<div class="notis bahaya" style="margin:0">Gagal disambung. Pastikan Web App di-deploy dengan akses "Anyone".</div>`;

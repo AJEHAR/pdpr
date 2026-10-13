@@ -17,7 +17,9 @@ const HAD_MB = 25; // had keselamatan pelayan (had sebenar ditetapkan di Admin â
 function doGet() {
   try {
     const f = folderInduk();
-    return jawab({ ok: true, folder: f.getName(), url: f.getUrl(), masa: new Date().toISOString() });
+    let guna = null, had = null;
+    try { guna = DriveApp.getStorageUsed(); had = DriveApp.getStorageLimit(); } catch (e) {}
+    return jawab({ ok: true, folder: f.getName(), url: f.getUrl(), storan: { guna: guna, had: had }, masa: new Date().toISOString() });
   } catch (e) {
     return jawab({ ok: false, ralat: 'Gagal akses Google Drive: ' + e.message });
   }
@@ -51,8 +53,17 @@ function doPost(e) {
     if (req.aksi === 'murid') return jawab(simpanMurid(req, pengguna));
     if (req.aksi === 'padamMurid') return jawab(padamMurid(req, pengguna));
 
-    const profil = bacaProfil(req.token, pengguna.uid);
-    if (!profil || profil.status !== 'lulus') throw new Error('Akaun belum diluluskan admin.');
+    let profil = bacaProfil(req.token, pengguna.uid);
+    if (!profil.ok) {
+      console.error('Gagal baca profil', pengguna.email, profil.kod, profil.ralat);
+      if (profil.kod === 404) throw new Error('Akaun tidak dijumpai. Sila log keluar dan log masuk semula.');
+      // DELiMa disahkan Google = diluluskan automatik (dasar sistem), walaupun Firestore tidak dapat dibaca
+      if (pengguna.delima) profil = { ok: true, status: 'lulus', role: 'guru' };
+      else throw new Error(profil.kod === 429
+        ? 'Sistem sibuk (kuota harian Firebase habis). Cuba lagi sebentar atau maklumkan admin.'
+        : 'Gagal menyemak akaun (kod ' + profil.kod + '). Cuba lagi sebentar.');
+    }
+    if (profil.status !== 'lulus') throw new Error('Akaun belum diluluskan admin.');
 
     if (req.aksi === 'padam') return jawab(padam(req, pengguna, profil));
     if (req.aksi === 'lihat') return jawab(lihat(req));
@@ -112,16 +123,24 @@ function sahkanToken(token) {
   });
   if (r.getResponseCode() !== 200) throw new Error('Sesi log masuk tamat. Sila log masuk semula.');
   const u = JSON.parse(r.getContentText()).users[0];
-  return { uid: u.localId, email: (u.email || '').toLowerCase() };
+  const email = (u.email || '').toLowerCase();
+  return { uid: u.localId, email: email, delima: !!u.emailVerified && /@moe-dl\.edu\.my$/.test(email) };
 }
 
 /** Baca users/{uid} dari Firestore menggunakan token pengguna (peraturan Firestore terpakai) */
 function bacaProfil(token, uid) {
   const url = 'https://firestore.googleapis.com/v1/projects/' + FIREBASE_PROJECT_ID + '/databases/(default)/documents/users/' + uid;
-  const r = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
-  if (r.getResponseCode() !== 200) return null;
+  let r;
+  for (let cuba = 0; cuba < 2; cuba++) { // cuba semula sekali jika gangguan sementara
+    r = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
+    if (r.getResponseCode() === 200 || r.getResponseCode() === 404 || r.getResponseCode() === 403) break;
+    Utilities.sleep(800);
+  }
+  const kod = r.getResponseCode();
+  if (kod !== 200) return { ok: false, kod: kod, ralat: r.getContentText().slice(0, 300) };
   const f = JSON.parse(r.getContentText()).fields || {};
   return {
+    ok: true,
     status: f.status && f.status.stringValue,
     role: f.role && f.role.stringValue,
   };

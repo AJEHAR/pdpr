@@ -1,0 +1,22 @@
+{
+  "name": "Portal PDPR SK Pendidikan Khas Kuantan",
+  "short_name": "PDPR CBA4082",
+  "description": "Jadual, bahan pembelajaran dan penghantaran kerja murid semasa PDPR.",
+  "id": "./",
+  "start_url": "./index.html?sumber=aplikasi",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6f4ef",
+  "theme_color": "#0f5c4d",
+  "lang": "ms",
+  "icons": [
+    { "src": "assets/img/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/img/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/img/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Jadual Kelas", "url": "./kelas.html", "icons": [{ "src": "assets/img/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Log Masuk Guru", "url": "./login.html", "icons": [{ "src": "assets/img/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

@@ -4,34 +4,48 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Rekod Saya · Portal PDPR</title>
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#0f5c4d">
+  <link rel="icon" type="image/png" href="../assets/img/favicon.png">
+  <link rel="apple-touch-icon" href="../assets/img/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="PDPR CBA4082">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <link rel="stylesheet" href="../assets/css/style.css">
 </head>
 <body>
 <main>
   <div class="kepala">
     <div>
-      <h1>Rekod Saya</h1>
-      <p class="lembut">Semua bahan yang anda muat naik, termasuk bagi pihak guru lain.</p>
+      <h1 id="tajuk">Rekod Saya</h1>
+      <p class="lembut" id="subtajuk">Semua bahan yang anda muat naik, termasuk bagi pihak guru lain.</p>
     </div>
-    <a class="btn" href="upload.html" id="btn-upload"></a>
+    <a class="btn hanya-pemilik" href="upload.html" id="btn-upload"></a>
   </div>
   <div class="statistik" id="statistik"></div>
   <div id="senarai"><p class="memuat">Memuatkan…</p></div>
 </main>
 
 <script type="module">
-  import { kawal } from '../assets/js/auth.js';
-  import { pasangApp, esc, ikon, namaCantik, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
-  import { muatJadual, bahanSaya, padamBahan, muatTetapan } from '../assets/js/data.js';
+  import { kawal, guruDilihat } from '../assets/js/auth.js';
+  import { pasangApp, pasangJalurLihat, esc, ikon, namaCantik, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
+  import { muatJadual, bahanSaya, bahanGuru, padamBahan, muatTetapan, tulis } from '../assets/js/data.js';
   import { HARI } from '../assets/js/jadual.js';
-  import { buangFail } from '../assets/js/upload.js';
+  import { buangFail, hantarFail, kecilkanGambar } from '../assets/js/upload.js';
 
   const sesiAuth = await kawal('guru');
   await pasangApp('guru/rekod.html', sesiAuth);
-  const { u } = sesiAuth;
+  const { u, profil } = sesiAuth;
+  const LIHAT = guruDilihat(profil); // Pantau Guru (admin, lihat sahaja)
   document.getElementById('btn-upload').innerHTML = `${ikon('upload', 18)} Upload baharu`;
 
   const [jadual, tetapan] = await Promise.all([muatJadual(), muatTetapan()]);
+  if (LIHAT) {
+    const nama = namaCantik(jadual.guru[LIHAT]?.nama || LIHAT);
+    pasangJalurLihat(LIHAT, nama, 'bahan');
+    document.getElementById('tajuk').textContent = 'Bahan diupload';
+    document.getElementById('subtajuk').textContent = `Bahan untuk sesi ${nama} (termasuk oleh guru ganti) dan bahan yang dimuat naik bagi pihak guru lain.`;
+  }
 
   // ID sesi = kelas_subjek_hari_waktuMula
   const labelSesi = (id) => {
@@ -41,14 +55,17 @@
 
   let data = [];
   async function muat() {
-    data = await bahanSaya(u.uid);
+    data = LIHAT ? await bahanGuru(LIHAT) : await bahanSaya(u.uid);
     const tarikhUnik = new Set(data.map((b) => b.tarikh));
     const sesiUnik = new Set(data.flatMap((b) => (b.sesi || []).map((s) => b.tarikh + s)));
     document.getElementById('statistik').innerHTML = `
       <div class="stat"><small>Jumlah bahan</small><b>${data.length}</b></div>
       <div class="stat"><small>Sesi diliputi</small><b>${sesiUnik.size}</b></div>
       <div class="stat"><small>Hari PDPR</small><b>${tarikhUnik.size}</b></div>
-      <div class="stat"><small>Bagi pihak guru lain</small><b>${data.filter((b) => b.bagiPihak).length}</b></div>`;
+      ${LIHAT
+        ? `<div class="stat"><small>Diisi oleh guru ganti</small><b>${data.filter((b) => b.guruId === LIHAT && b.bagiPihak).length}</b></div>
+           <div class="stat"><small>Bagi pihak guru lain</small><b>${data.filter((b) => b.olehGuruId === LIHAT && b.bagiPihak).length}</b></div>`
+        : `<div class="stat"><small>Bagi pihak guru lain</small><b>${data.filter((b) => b.bagiPihak).length}</b></div>`}`;
     lukis();
   }
 
@@ -69,10 +86,13 @@
             <tr>
               <td><a href="${esc(b.url)}" target="_blank" rel="noopener" style="display:inline-flex;gap:8px;align-items:center;font-weight:600">
                 ${ikon(b.jenis === 'pautan' ? 'pautan' : 'fail', 18)} ${esc(b.nama || b.url)}</a>
-                ${b.bagiPihak ? `<div><span class="lencana amaran">Bagi pihak ${esc(namaCantik(jadual.guru[b.guruId]?.nama || '?'))}</span></div>` : ''}</td>
+                ${b.bagiPihak ? (LIHAT && b.guruId === LIHAT
+                  ? `<div><span class="lencana tiada">Diisi oleh ${esc(namaCantik(b.olehNama || '?'))}</span></div>`
+                  : `<div><span class="lencana amaran">Bagi pihak ${esc(namaCantik(jadual.guru[b.guruId]?.nama || '?'))}</span></div>`) : ''}
+                <div class="kecil lembut">${b.masa ? new Date(b.masa).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' }) : ''}</div></td>
               <td data-label="Sesi">${(b.sesi || []).map((s, i) => `<div class="kecil">${esc(b.label?.[i] || labelSesi(s))}</div>`).join('')}</td>
               <td data-label="Catatan" class="kecil lembut">${esc(b.catatan || '—')}</td>
-              <td style="text-align:right"><button class="btn bahaya kecil" data-padam="${b.id}">${ikon('sampah', 16)} Padam</button></td>
+              <td style="text-align:right;white-space:nowrap">${LIHAT ? '' : `<button class="btn kedua kecil" data-edit="${b.id}">✏️ Edit</button> <button class="btn bahaya kecil" data-padam="${b.id}">${ikon('sampah', 16)} Padam</button>`}</td>
             </tr>`).join('')}
           </tbody>
         </table>
@@ -80,8 +100,10 @@
   }
 
   document.getElementById('senarai').onclick = async (e) => {
+    const ed = e.target.closest('[data-edit]');
+    if (ed && !LIHAT) return bukaEdit(data.find((x) => x.id === ed.dataset.edit));
     const btn = e.target.closest('[data-padam]');
-    if (!btn) return;
+    if (!btn || LIHAT) return;
     const b = data.find((x) => x.id === btn.dataset.padam);
     if (!confirm(`Padam "${b.nama || b.url}"?${b.jenis === 'fail' ? '\nFail juga akan dipindahkan ke Trash Google Drive.' : ''}`)) return;
     btn.disabled = true;
@@ -95,6 +117,76 @@
       btn.disabled = false;
     }
   };
+
+  // ---------- Edit bahan: tajuk, catatan, pautan, atau ganti fail ----------
+  function bukaEdit(b) {
+    if (!b) return;
+    const HAD = (tetapan.hadSaizMB || 10) * 1024 * 1024;
+    const el = document.createElement('div');
+    el.className = 'helaian borang-kerja';
+    el.innerHTML = `
+      <div class="helaian-latar" data-tutup></div>
+      <div class="helaian-isi" role="dialog" aria-label="Edit bahan">
+        <div class="helaian-pegang"></div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px">
+          <div><h2 style="margin:0">Edit bahan</h2><p class="lembut kecil" style="margin:2px 0 0">${esc(formatTarikh(b.tarikh))} · ${esc((b.label || []).join(', '))}</p></div>
+          <button class="ik-btn" data-tutup aria-label="Tutup" style="color:var(--lembut)">${ikon('tutup')}</button>
+        </div>
+        <div class="medan"><label for="ed-nama">Tajuk / nama bahan</label><input type="text" id="ed-nama" value="${esc(b.nama || '')}" maxlength="150"></div>
+        ${b.jenis === 'pautan'
+          ? `<div class="medan"><label for="ed-url">Pautan</label><input type="url" id="ed-url" value="${esc(b.url)}" inputmode="url"></div>`
+          : `<div class="medan"><label>Fail</label>
+              <div class="fail-item"><span class="n">${esc(b.nama)}</span><a class="kecil" href="${esc(b.url)}" target="_blank" rel="noopener">Buka</a></div>
+              <label class="btn kedua kecil" style="margin-top:8px;display:inline-flex">${ikon('fail', 16)} Ganti fail…<input type="file" id="ed-fail" hidden
+                accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.webp,.heic,.mp3,.m4a,.mp4,.txt"></label>
+              <div id="ed-fail-baru" class="bantuan"></div></div>`}
+        <div class="medan"><label for="ed-catatan">Catatan untuk murid / ibu bapa</label><textarea id="ed-catatan" maxlength="500">${esc(b.catatan || '')}</textarea></div>
+        <button class="btn penuh" id="ed-simpan">Simpan perubahan</button>
+      </div>`;
+    document.body.append(el);
+    document.body.style.overflow = 'hidden';
+    const $e = (q) => el.querySelector(q);
+    const tutup = () => { el.remove(); document.body.style.overflow = ''; };
+    el.addEventListener('click', (e) => { if (e.target.closest('[data-tutup]') && !$e('#ed-simpan').classList.contains('memuat')) tutup(); });
+    let failBaru = null;
+    $e('#ed-fail')?.addEventListener('change', (e) => {
+      failBaru = e.target.files[0] || null;
+      $e('#ed-fail-baru').textContent = failBaru ? `Fail baharu: ${failBaru.name} (${(failBaru.size / 1048576).toFixed(1)} MB). Fail lama akan dipindahkan ke Trash.` : '';
+      if (failBaru && !$e('#ed-nama').value.trim()) $e('#ed-nama').value = failBaru.name;
+    });
+
+    $e('#ed-simpan').onclick = async () => {
+      const btn = $e('#ed-simpan');
+      const kemas = { nama: $e('#ed-nama').value.trim() || b.nama, catatan: $e('#ed-catatan').value.trim(), dikemaskini: new Date().toISOString() };
+      if (b.jenis === 'pautan') {
+        let v = $e('#ed-url').value.trim();
+        if (v && !/^https?:\/\//i.test(v)) v = 'https://' + v;
+        try { kemas.url = new URL(v).href; } catch { return toast('Pautan tidak sah', 'ralat'); }
+      }
+      btn.classList.add('memuat'); btn.disabled = true; btn.innerHTML = '<i class="pusing putih"></i><span>Menyimpan…</span>';
+      try {
+        if (failBaru) {
+          const f = await kecilkanGambar(failBaru);
+          if (f.size > HAD) throw new Error(`Fail melebihi ${tetapan.hadSaizMB || 10} MB`);
+          const g = jadual.guru[b.guruId];
+          const kelas = jadual.kelas[(b.kelasIds || [])[0]]?.nama || 'LAIN';
+          const awalan = [kelas, jadual.subjek[(b.subjekIds || [])[0]]?.ringkas, g?.ringkas].filter(Boolean).join('_').replace(/[\\/:*?"<>| ]+/g, '-');
+          btn.innerHTML = '<i class="pusing putih"></i><span>Memuat naik fail…</span>';
+          const r = await hantarFail(f, { tarikh: b.tarikh, kelas, guru: g ? `${g.ringkas} - ${g.nama}` : 'LAIN-LAIN', awalan }, tetapan.appsScriptUrl);
+          Object.assign(kemas, { url: r.url, fileId: r.id, nama: $e('#ed-nama').value.trim() === b.nama ? failBaru.name : kemas.nama });
+        }
+        await tulis('uploads', b.id, kemas, true);
+        if (failBaru && b.fileId) buangFail(b.fileId, tetapan.appsScriptUrl);
+        toast('Bahan dikemas kini');
+        tutup();
+        muat();
+      } catch (err) {
+        console.error(err);
+        toast(mesejRalat(err), 'ralat');
+        btn.classList.remove('memuat'); btn.disabled = false; btn.textContent = 'Simpan perubahan';
+      }
+    };
+  }
 
   muat();
 </script>
