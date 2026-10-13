@@ -1,7 +1,7 @@
 // ============================================================
 //  firebase.js — muat SDK Firebase sekali sahaja (lazy)
 // ============================================================
-import { FIREBASE_CONFIG } from './config.js';
+import { FIREBASE_CONFIG } from './config.js?v=20261013-2113';
 
 export const MOD_DEMO = !FIREBASE_CONFIG.apiKey;
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.2';

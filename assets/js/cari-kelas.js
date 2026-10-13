@@ -2,7 +2,7 @@
 //  cari-kelas.js — Carian kelas yang mesra (laman utama & halaman kelas)
 //  "raub", "4 raub", "4raub", "tahun 4", "pra" semuanya berfungsi.
 // ============================================================
-import { esc, ikon } from './ui.js';
+import { esc, ikon } from './ui.js?v=20261013-2113';
 
 const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 

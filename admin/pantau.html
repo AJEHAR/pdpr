@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-title" content="PDPR CBA4082">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <link rel="stylesheet" href="../assets/css/style.css">
+  <link rel="stylesheet" href="../assets/css/style.css?v=20261013-2113">
   <script>
     // Papar ralat jika skrip halaman gagal (cth fail lama dalam cache), bukannya tersekat pada "Memuatkan…"
     (function () {
@@ -64,11 +64,11 @@
 </main>
 
 <script type="module">
-  import { kawal } from '../assets/js/auth.js';
-  import { pasangApp, esc, ikon, namaCantik, hariIni, hariBekerja, tambahHari, formatTarikh } from '../assets/js/ui.js';
-  import { muatJadual, statusPdpr, kelasTerlibat, bahanTarikh, petaSiapGuru, siapUntuk, modKongsi, muatTetapan, senarai, tiadaJulat, infoTiadaJulat, petaTiada, guruTiada, JENIS_TIADA } from '../assets/js/data.js';
-  import { sesiHari, indeksHari, labelWaktu } from '../assets/js/jadual.js';
-  import { ikonCari } from '../assets/js/cari-kelas.js';
+  import { kawal } from '../assets/js/auth.js?v=20261013-2113';
+  import { pasangApp, esc, ikon, namaCantik, hariIni, hariBekerja, tambahHari, formatTarikh } from '../assets/js/ui.js?v=20261013-2113';
+  import { muatJadual, statusPdpr, kelasTerlibat, bahanTarikh, petaSiapGuru, siapUntuk, modKongsi, muatTetapan, senarai, tiadaJulat, infoTiadaJulat, petaTiada, guruTiada, JENIS_TIADA } from '../assets/js/data.js?v=20261013-2113';
+  import { sesiHari, indeksHari, labelWaktu } from '../assets/js/jadual.js?v=20261013-2113';
+  import { ikonCari } from '../assets/js/cari-kelas.js?v=20261013-2113';
 
   const sesiAuth = await kawal('admin');
   await pasangApp('admin/pantau.html', sesiAuth);

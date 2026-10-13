@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-title" content="PDPR CBA4082">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <link rel="stylesheet" href="../assets/css/style.css">
+  <link rel="stylesheet" href="../assets/css/style.css?v=20261013-2113">
   <script>
     // Papar ralat jika skrip halaman gagal (cth fail lama dalam cache), bukannya tersekat pada "Memuatkan…"
     (function () {
@@ -47,10 +47,10 @@
 </main>
 
 <script type="module">
-  import { kawal, guruDilihat } from '../assets/js/auth.js';
-  import { pasangApp, pasangJalurLihat, esc, ikon, namaCantik, hariIni, tambahHari, isninMinggu, formatTarikh } from '../assets/js/ui.js';
-  import { muatJadual, muatJadualUntuk, kalendarPdpr, kelasTerlibat, bahanJulat, petaSiapGuru, siapUntuk, modKongsi, muatTetapan, hantaranJulat, kiraHantaran, tiadaJulat, infoTiadaJulat, petaTiada, guruTiada, JENIS_TIADA } from '../assets/js/data.js';
-  import { sesiHari, HARI, labelWaktu, gabungKamus } from '../assets/js/jadual.js';
+  import { kawal, guruDilihat } from '../assets/js/auth.js?v=20261013-2113';
+  import { pasangApp, pasangJalurLihat, esc, ikon, namaCantik, hariIni, tambahHari, isninMinggu, formatTarikh } from '../assets/js/ui.js?v=20261013-2113';
+  import { muatJadual, muatJadualUntuk, kalendarPdpr, kelasTerlibat, bahanJulat, petaSiapGuru, siapUntuk, modKongsi, muatTetapan, hantaranJulat, kiraHantaran, tiadaJulat, infoTiadaJulat, petaTiada, guruTiada, JENIS_TIADA } from '../assets/js/data.js?v=20261013-2113';
+  import { sesiHari, HARI, labelWaktu, gabungKamus } from '../assets/js/jadual.js?v=20261013-2113';
 
   const sesiAuth = await kawal('guru', { perluGuru: true });
   await pasangApp('guru/index.html', sesiAuth);

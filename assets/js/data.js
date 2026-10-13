@@ -14,9 +14,9 @@
 //    jemputan/{emel}        { guruId|null, role, oleh, masa }   ← daftar awal oleh admin
 //    tuntutan/{guruId}      { uid?, email }                      ← nama guru yang sudah dipautkan
 // ============================================================
-import { firebase, MOD_DEMO } from './firebase.js';
-import { ZON_MASA } from './config.js';
-import { indeksHari } from './jadual.js';
+import { firebase, MOD_DEMO } from './firebase.js?v=20261013-2113';
+import { ZON_MASA } from './config.js?v=20261013-2113';
+import { indeksHari } from './jadual.js?v=20261013-2113';
 
 export { MOD_DEMO };
 

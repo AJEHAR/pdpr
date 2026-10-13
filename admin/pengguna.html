@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-title" content="PDPR CBA4082">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <link rel="stylesheet" href="../assets/css/style.css">
+  <link rel="stylesheet" href="../assets/css/style.css?v=20261013-2113">
   <script>
     // Papar ralat jika skrip halaman gagal (cth fail lama dalam cache), bukannya tersekat pada "Memuatkan…"
     (function () {
@@ -40,10 +40,10 @@
 </main>
 
 <script type="module">
-  import { kawal } from '../assets/js/auth.js';
-  import { pasangApp, esc, namaCantik, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
-  import { muatJadual, senarai, tulis, buang, kelompok } from '../assets/js/data.js';
-  import { gabungKamus } from '../assets/js/jadual.js';
+  import { kawal } from '../assets/js/auth.js?v=20261013-2113';
+  import { pasangApp, esc, namaCantik, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js?v=20261013-2113';
+  import { muatJadual, senarai, tulis, buang, kelompok } from '../assets/js/data.js?v=20261013-2113';
+  import { gabungKamus } from '../assets/js/jadual.js?v=20261013-2113';
 
   const sesiAuth = await kawal('admin');
   await pasangApp('admin/pengguna.html', sesiAuth);

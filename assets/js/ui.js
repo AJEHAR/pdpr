@@ -1,8 +1,8 @@
 // ============================================================
 //  ui.js — Rangka halaman (awam & app guru/admin), ikon, toast, tarikh
 // ============================================================
-import { ZON_MASA } from './config.js';
-import { MOD_DEMO, tetapanCache, muatTetapan } from './data.js';
+import { ZON_MASA } from './config.js?v=20261013-2113';
+import { MOD_DEMO, tetapanCache, muatTetapan } from './data.js?v=20261013-2113';
 
 export const akar = new URL('../../', import.meta.url).href;
 
@@ -108,7 +108,7 @@ export function pasangRangka(aktif) {
  * @param {string} aktif  laluan relatif, cth 'guru/index.html'
  */
 export async function pasangApp(aktif, { u, profil }) {
-  const { adalahAdmin, logKeluar } = await import('./auth.js');
+  const { adalahAdmin, logKeluar } = await import('./auth.js?v=20261013-2113');
   const guru = profil.guruId
     ? [
         { href: 'guru/index.html', label: 'Jadual Saya', pendek: 'Jadual', ikon: 'kalendar' },
@@ -260,7 +260,7 @@ export function pasangJalurLihat(guruId, nama, tab) {
 // ---------- Makluman (jalur pengumuman) ----------
 const KUNCI_TUTUP = 'pdpr-makluman-tutup';
 export async function pasangMakluman(sasaran) {
-  const { maklumanAktif } = await import('./data.js');
+  const { maklumanAktif } = await import('./data.js?v=20261013-2113');
   let tutup = [];
   try { tutup = JSON.parse(localStorage.getItem(KUNCI_TUTUP) || '[]'); } catch {}
   const xs = (await maklumanAktif(sasaran)).filter((m) => !tutup.includes(m.id));

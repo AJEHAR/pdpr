@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-title" content="PDPR CBA4082">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <link rel="stylesheet" href="../assets/css/style.css">
+  <link rel="stylesheet" href="../assets/css/style.css?v=20261013-2113">
   <script>
     // Papar ralat jika skrip halaman gagal (cth fail lama dalam cache), bukannya tersekat pada "Memuatkan…"
     (function () {
@@ -41,11 +41,11 @@
 </main>
 
 <script type="module">
-  import { kawal, guruDilihat } from '../assets/js/auth.js';
-  import { pasangApp, pasangJalurLihat, esc, ikon, namaCantik, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
-  import { muatJadual, bahanSaya, bahanGuru, padamBahan, muatTetapan, tulis } from '../assets/js/data.js';
-  import { HARI } from '../assets/js/jadual.js';
-  import { buangFail, hantarFail, kecilkanGambar } from '../assets/js/upload.js';
+  import { kawal, guruDilihat } from '../assets/js/auth.js?v=20261013-2113';
+  import { pasangApp, pasangJalurLihat, esc, ikon, namaCantik, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js?v=20261013-2113';
+  import { muatJadual, bahanSaya, bahanGuru, padamBahan, muatTetapan, tulis } from '../assets/js/data.js?v=20261013-2113';
+  import { HARI } from '../assets/js/jadual.js?v=20261013-2113';
+  import { buangFail, hantarFail, kecilkanGambar } from '../assets/js/upload.js?v=20261013-2113';
 
   const sesiAuth = await kawal('guru');
   await pasangApp('guru/rekod.html', sesiAuth);

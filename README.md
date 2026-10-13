@@ -109,6 +109,12 @@ Jika anda ubah `Code.gs`, buat **Deploy → Manage deployments → Edit → New 
 - Slot berkongsi guru (Tasmik, PI/PM): satu upload oleh mana-mana guru dikira selesai untuk semua.
 - **Guru ganti**: tanda "Upload bagi pihak guru lain". Rekod menyimpan guru asal dan siapa yang upload.
 
+## Versi fail (elak cache lama)
+
+Setiap import modul dan `style.css` membawa cop versi, contohnya `data.js?v=20261013-2113`.
+Selepas mengubah kod, jalankan `python3 tools/versi.py` sebelum push. Semua fail mendapat versi baharu yang sama,
+jadi browser dan CDN GitHub Pages tidak mencampurkan fail lama dengan fail baharu.
+
 ## Struktur kod
 
 ```

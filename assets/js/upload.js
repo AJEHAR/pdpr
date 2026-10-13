@@ -1,8 +1,8 @@
 // ============================================================
 //  upload.js — Hantar fail ke Google Drive melalui Apps Script
 // ============================================================
-import { MOD_DEMO } from './firebase.js';
-import { tokenId, tokenTanpaNama } from './auth.js';
+import { MOD_DEMO } from './firebase.js?v=20261013-2113';
+import { tokenId, tokenTanpaNama } from './auth.js?v=20261013-2113';
 
 /** Kecilkan gambar besar (foto telefon) supaya cepat dimuat naik. Fail lain dipulangkan asal. */
 export async function kecilkanGambar(fail, sisiMaks = 1800, kualiti = 0.82) {

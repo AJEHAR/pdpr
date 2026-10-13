@@ -5,10 +5,10 @@
 //  • pratonton kerja yang sudah dihantar dari telefon ini + boleh padam
 //  • butang Hantar menunjukkan penunjuk loading & kemajuan
 // ============================================================
-import { esc, ikon, formatTarikh, mesejRalat, toast } from './ui.js';
-import { tambahHantaran, buang } from './data.js';
-import { tokenTanpaNama } from './auth.js';
-import { hantarKerjaMurid, kecilkanGambar, padamKerjaMurid } from './upload.js';
+import { esc, ikon, formatTarikh, mesejRalat, toast } from './ui.js?v=20261013-2113';
+import { tambahHantaran, buang } from './data.js?v=20261013-2113';
+import { tokenTanpaNama } from './auth.js?v=20261013-2113';
+import { hantarKerjaMurid, kecilkanGambar, padamKerjaMurid } from './upload.js?v=20261013-2113';
 
 const KUNCI_NAMA = 'pdpr-nama-murid';
 const KUNCI_SEJARAH = 'pdpr-hantaran-saya';

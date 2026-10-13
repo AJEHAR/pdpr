@@ -1,9 +1,9 @@
 // ============================================================
 //  auth.js — Log masuk Google, profil pengguna & kawalan akses
 // ============================================================
-import { firebase, MOD_DEMO } from './firebase.js';
-import { SUPERADMIN_EMAIL, DOMAIN_DELIMA } from './config.js';
-import { ambil, kelompok, senarai, tulis } from './data.js';
+import { firebase, MOD_DEMO } from './firebase.js?v=20261013-2113';
+import { SUPERADMIN_EMAIL, DOMAIN_DELIMA } from './config.js?v=20261013-2113';
+import { ambil, kelompok, senarai, tulis } from './data.js?v=20261013-2113';
 
 const akar = new URL('../../', import.meta.url).href;
 const KUNCI_DEMO = 'pdpr-demo-user';
