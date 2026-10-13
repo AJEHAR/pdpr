@@ -59,6 +59,12 @@
         <div id="hasil-uji" style="margin-top:10px"></div>
         <div class="medan" style="margin-top:14px"><label for="had">Had saiz fail (MB)</label><input type="number" id="had" min="1" max="25" step="1"></div>
       </div>
+      <div class="kad">
+        <h2>Slot berkongsi (2 guru satu waktu)</h2>
+        <p class="bantuan" style="margin-top:0">Contoh: Tasmik atau kelas gabungan yang diajar oleh dua guru serentak.</p>
+        <label class="pilihan-radio"><input type="radio" name="kongsi" value="satu"> <span><b>Satu upload cukup</b><br><small class="lembut">Bila salah seorang guru upload, sesi dikira selesai untuk semua guru. Guru lain nampak "✓ oleh …".</small></span></label>
+        <label class="pilihan-radio"><input type="radio" name="kongsi" value="semua"> <span><b>Setiap guru perlu upload sendiri</b><br><small class="lembut">Sesi hanya dikira selesai bagi guru yang upload. Guru yang belum upload dikira belum diisi.</small></span></label>
+      </div>
       <div class="kad ruang-drive">
         <h2>Ruang Google Drive</h2>
         <div id="ruang"><p class="lembut kecil">Isi URL Apps Script untuk melihat penggunaan ruang.</p></div>
@@ -89,6 +95,7 @@
   $('kod').value = t.kod;
   $('url').value = t.appsScriptUrl;
   $('had').value = t.hadSaizMB;
+  document.querySelector(`[name=kongsi][value="${t.slotBerkongsi === 'semua' ? 'semua' : 'satu'}"]`).checked = true;
   if (logo) $('pratonton').src = logo;
 
   $('info-jadual').innerHTML = `
@@ -155,6 +162,7 @@
         logo,
         appsScriptUrl: $('url').value.trim(),
         hadSaizMB: Math.max(1, Math.min(25, +$('had').value || 10)),
+        slotBerkongsi: document.querySelector('[name=kongsi]:checked')?.value === 'semua' ? 'semua' : 'satu',
       });
       toast(MOD_DEMO ? 'Disimpan (mod demo: dalam browser ini sahaja)' : 'Tetapan disimpan');
       setTimeout(() => location.reload(), 700);

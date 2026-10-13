@@ -149,6 +149,7 @@ export const TETAPAN_ASAL = {
   logo: '',
   appsScriptUrl: '',
   hadSaizMB: 10,
+  slotBerkongsi: 'satu',
 };
 const KUNCI_TETAPAN = 'pdpr-tetapan';
 
@@ -397,6 +398,38 @@ export function petaSiap(bahan) {
   const p = {};
   for (const b of bahan) for (const s of b.sesi || []) (p[b.tarikh] ??= new Set()).add(s);
   return p;
+}
+
+/**
+ * Peta siap terperinci: { tarikh: Map(sesiId → Set(guruId yang dikreditkan)) }.
+ * Guru dikreditkan = guru asal sesi (b.guruId). Upload guru ganti dikira untuk guru yang tidak hadir.
+ */
+export function petaSiapGuru(bahan) {
+  const p = {};
+  for (const b of bahan) {
+    const g = b.guruId || b.olehGuruId || '?';
+    for (const s of b.sesi || []) {
+      const m = (p[b.tarikh] ??= new Map());
+      if (!m.has(s)) m.set(s, new Set());
+      m.get(s).add(g);
+    }
+  }
+  return p;
+}
+
+/** Mod slot berkongsi (2+ guru satu waktu): 'satu' = satu upload cukup untuk semua; 'semua' = setiap guru perlu upload sendiri */
+export const modKongsi = (tetapan) => (tetapan?.slotBerkongsi === 'semua' ? 'semua' : 'satu');
+
+/**
+ * Status sesi bagi seorang guru.
+ * @returns {{ siap:boolean, oleh:string[] }} oleh = guru lain yang sudah upload (untuk label "oleh …")
+ */
+export function siapUntuk(peta, t, sesiId, guruId, mod) {
+  const set = peta[t]?.get(sesiId);
+  if (!set || !set.size) return { siap: false, oleh: [] };
+  const sendiri = !guruId || set.has(guruId);
+  const oleh = [...set].filter((g) => g !== guruId);
+  return { siap: sendiri || mod !== 'semua', sendiri, oleh };
 }
 
 // ------------------------------------------------------------

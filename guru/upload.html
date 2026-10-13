@@ -28,9 +28,9 @@
 <script type="module">
   import { kawal } from '../assets/js/auth.js';
   import { pasangApp, esc, ikon, namaCantik, hariIni, hariBekerja, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
-  import { muatJadual, statusPdpr, kelasTerlibat, bahanJulat, tambahBahan, muatTetapan } from '../assets/js/data.js';
+  import { muatJadual, statusPdpr, kelasTerlibat, bahanJulat, tambahBahan, padamBahan, muatTetapan } from '../assets/js/data.js';
   import { sesiHari, indeksHari, labelWaktu } from '../assets/js/jadual.js';
-  import { hantarFail, kecilkanGambar } from '../assets/js/upload.js';
+  import { hantarFail, kecilkanGambar, buangFail } from '../assets/js/upload.js';
 
   const sesiAuth = await kawal('guru');
   await pasangApp('guru/upload.html', sesiAuth);
@@ -54,6 +54,7 @@
   const saizMB = (b) => (b / 1024 / 1024).toFixed(b < 1024 * 1024 ? 2 : 1) + ' MB';
 
   el.innerHTML = `
+    <div id="notis-berjaya"></div>
     ${profil.status !== 'lulus' ? `<div class="notis amaran">Akaun anda belum diluluskan admin. Butang hantar akan aktif selepas kelulusan.</div>` : ''}
     <div class="upload-grid">
       <section class="kad">
@@ -114,10 +115,56 @@
           <button class="btn penuh" id="hantar">${ikon('upload', 18)} Hantar</button>
         </div>
       </section>
-    </div>`;
+    </div>
+    <section class="kad senarai-bahan-hari" id="kad-bahan">
+      <div class="seksyen-tajuk" style="margin-bottom:10px"><h2 style="margin:0" id="tajuk-bahan">Bahan yang sudah dimuat naik</h2><span class="lencana tiada" id="bil-bahan"></span></div>
+      <div id="senarai-bahan"><p class="lembut kecil">Memuatkan…</p></div>
+    </section>`;
 
   const $ = (id) => document.getElementById(id);
   let sesiHariIni = [], statusHari = { aktif: false }, sedia = new Map(), jd = jadual; // jd = jadual ikut tarikh dipilih
+  let bahanHari = [], idBaru = new Set();
+
+  // ---------- Senarai bahan pada tarikh dipilih ----------
+  const ikonJenis = (b) => b.jenis === 'pautan' ? '🔗' : /\.(jpe?g|png|webp|heic|gif)$/i.test(b.nama || '') ? '🖼️' : /\.pdf$/i.test(b.nama || '') ? '📕' : /\.(mp3|m4a|wav)$/i.test(b.nama || '') ? '🎧' : /\.mp4$/i.test(b.nama || '') ? '🎬' : '📄';
+  const jam = (iso) => iso ? new Date(iso).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' }) : '';
+  function lukisBahan() {
+    const t = keadaan.tarikh;
+    $('tajuk-bahan').textContent = `Bahan pada ${formatTarikh(t, 'pendek')}`;
+    $('bil-bahan').textContent = bahanHari.length ? `${bahanHari.length} bahan` : '';
+    if (!bahanHari.length) {
+      $('senarai-bahan').innerHTML = `<p class="lembut kecil" style="margin:0">Belum ada bahan dimuat naik untuk tarikh ini.</p>`;
+      return;
+    }
+    const xs = [...bahanHari].sort((a, b) => (b.masa || '').localeCompare(a.masa || ''));
+    $('senarai-bahan').innerHTML = xs.map((b) => {
+      const milikSaya = b.uid === u.uid;
+      const oleh = b.bagiPihak ? `${b.olehNama || '?'} (guru ganti)` : (b.guruId || b.olehGuruId) !== keadaan.guruId ? `${jd.guru[b.guruId]?.ringkas || b.olehNama || '?'} (slot berkongsi)` : '';
+      return `<div class="bahan-item ${idBaru.has(b.id) ? 'baru' : ''}">
+        <span class="ikon">${ikonJenis(b)}</span>
+        <div class="isi">
+          <a href="${esc(b.url)}" target="_blank" rel="noopener">${esc(b.nama || 'Bahan')}</a>
+          <div class="kecil lembut">${esc((b.label || []).join(' · '))}</div>
+          <div class="kecil lembut">${jam(b.masa)}${oleh ? ' · oleh ' + esc(oleh) : ''}${b.catatan ? ' · ' + esc(b.catatan.length > 60 ? b.catatan.slice(0, 60) + '…' : b.catatan) : ''}</div>
+        </div>
+        ${idBaru.has(b.id) ? '<span class="lencana">Baru</span>' : ''}
+        ${milikSaya ? `<button class="ik-btn" data-padam-bahan="${esc(b.id)}" title="Padam">${ikon('sampah', 16)}</button>` : ''}
+      </div>`;
+    }).join('') + `<p class="bantuan" style="margin-bottom:0">Untuk edit catatan atau tukar fail, buka <a href="rekod.html">Rekod Saya</a>.</p>`;
+  }
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-padam-bahan]');
+    if (!btn) return;
+    const b = bahanHari.find((x) => x.id === btn.dataset.padamBahan);
+    if (!b || !confirm(`Padam "${b.nama}"?\n\nBahan ini akan hilang dari halaman kelas.`)) return;
+    btn.disabled = true;
+    try {
+      await padamBahan(b.id);
+      if (b.fileId) buangFail(b.fileId, tetapan.appsScriptUrl).catch(() => {});
+      toast('Bahan dipadam');
+      muatSesi();
+    } catch (err) { toast(mesejRalat(err), 'ralat'); btn.disabled = false; }
+  });
 
   // ---------- Sesi ----------
   async function muatSesi() {
@@ -125,14 +172,21 @@
     history.replaceState(null, '', `?t=${t}${keadaan.guruId && keadaan.guruId !== profil.guruId ? '&g=' + keadaan.guruId : ''}${keadaan.dipilih.size ? '&sesi=' + [...keadaan.dipilih].join(',') : ''}`);
     $('sesi').innerHTML = '';
     if (!keadaan.guruId) { $('info-hari').innerHTML = `<div class="notis info">Pilih guru dahulu.</div>`; return kemaskini(); }
-    if (h < 0) { $('info-hari').innerHTML = `<div class="notis amaran">${esc(formatTarikh(t))} ialah hujung minggu.</div>`; sesiHariIni = []; return kemaskini(); }
+    if (h < 0) { $('info-hari').innerHTML = `<div class="notis amaran">${esc(formatTarikh(t))} ialah hujung minggu.</div>`; sesiHariIni = []; bahanHari = []; lukisBahan(); return kemaskini(); }
 
     $('info-hari').innerHTML = `<p class="lembut kecil">Memuatkan…</p>`;
     const [st, bahan, jdT] = await Promise.all([statusPdpr(t), bahanJulat(t, t, keadaan.guruId), muatJadual(t)]);
     jd = jdT;
     statusHari = st;
+    bahanHari = bahan;
+    // sedia: sesiId → { saya: bil upload guru ini, lain: Set(kod guru lain yang upload) }
     sedia = new Map();
-    bahan.forEach((b) => (b.sesi || []).forEach((s) => sedia.set(s, (sedia.get(s) || 0) + 1)));
+    bahan.forEach((b) => (b.sesi || []).forEach((s) => {
+      const x = sedia.get(s) || { saya: 0, lain: new Set() };
+      if ((b.guruId || b.olehGuruId) === keadaan.guruId) x.saya++; else x.lain.add(jd.guru[b.guruId]?.ringkas || b.olehNama || '?');
+      sedia.set(s, x);
+    }));
+    lukisBahan();
     sesiHariIni = sesiHari(jd, h, { guruId: keadaan.guruId });
     // buang pilihan yang bukan milik hari/guru ini
     keadaan.dipilih = new Set([...keadaan.dipilih].filter((id) => sesiHariIni.some((s) => s.id === id)));
@@ -144,12 +198,13 @@
 
     $('sesi').innerHTML = sesiHariIni.length ? sesiHariIni.map((s) => {
       const pdpr = kelasTerlibat(st, s.kelas);
-      const n = sedia.get(s.id) || 0;
+      const x = sedia.get(s.id) || { saya: 0, lain: new Set() };
+      const lain = [...x.lain].join(', ');
       return `<label ${pdpr ? '' : 'style="opacity:.55"'}>
         <input type="checkbox" value="${s.id}" ${keadaan.dipilih.has(s.id) ? 'checked' : ''} ${pdpr ? '' : 'disabled'}>
         <span class="t"><b>${esc(jd.kelas[s.kelas]?.nama)} · ${esc(jd.subjek[s.subjek]?.nama)}</b>
           <small>${s.harian ? 'Aktiviti harian prasekolah' : `${s.mula}–${s.tamat} · ${labelWaktu(s.waktu)}`}${s.kumpulan.length ? ' · ' + esc(s.kumpulan.join(' & ')) : ''}</small></span>
-        ${!pdpr ? '<span class="lencana tiada">Bukan PDPR</span>' : n ? `<span class="lencana">✓ ${n}</span>` : '<span class="lencana amaran">Belum</span>'}
+        ${!pdpr ? '<span class="lencana tiada">Bukan PDPR</span>' : x.saya ? `<span class="lencana">✓ ${x.saya}</span>` : lain ? `<span class="lencana rakan" title="Slot berkongsi: guru lain sudah upload">✓ oleh ${esc(lain)}</span>` : '<span class="lencana amaran">Belum</span>'}
       </label>`;
     }).join('') : `<div class="kosong"><p>Tiada kelas pada hari ini.</p></div>`;
     $('sesi').onchange = (e) => {
@@ -171,7 +226,7 @@
   function lukisFail() {
     $('senarai-fail').innerHTML = keadaan.fail.map((x, i) => `
       <div class="fail-item ${x.ralat ? 'ralat' : x.siap ? 'siap' : ''}">${ikon(x.siap ? 'tanda' : 'fail', 18)}
-        <span class="n">${esc(x.f.name)}</span><span class="s">${x.ralat || x.status || saizMB(x.f.size)}</span>
+        <span class="n">${esc(x.f.name)}</span><span class="s">${x.sedang ? '<i class="pusing"></i>' : ''}${x.ralat || x.status || saizMB(x.f.size)}</span>
         ${x.siap || x.sedang ? '' : `<button class="ik-btn" data-buang="${i}" title="Buang">${ikon('tutup', 16)}</button>`}
       </div>`).join('');
     kemaskini();
@@ -214,7 +269,15 @@
     if (!/^https?:\/\//i.test(v)) v = 'https://' + v;
     try { return new URL(v).href; } catch { return ''; }
   }
+  let sedangHantar = false;
+  const BTN_ASAL = $('hantar').innerHTML;
+  function setButang(teks) {
+    const btn = $('hantar');
+    btn.disabled = true;
+    btn.innerHTML = `<i class="pusing putih"></i><span>${esc(teks)}</span>`;
+  }
   function kemaskini() {
+    if (sedangHantar) return; // jangan hidupkan semula butang semasa muat naik
     const nSesi = keadaan.dipilih.size;
     const failSah = keadaan.fail.filter((x) => !x.ralat && !x.siap);
     const bahanOk = keadaan.jenis === 'fail' ? failSah.length > 0 : !!bersihUrl($('url').value);
@@ -228,7 +291,10 @@
   // ---------- Hantar ----------
   $('hantar').onclick = async () => {
     const btn = $('hantar');
-    btn.disabled = true;
+    if (sedangHantar || btn.disabled) return;
+    sedangHantar = true;
+    setButang('Menghantar…');
+    const selesaiGagal = () => { sedangHantar = false; btn.innerHTML = BTN_ASAL; kemaskini(); };
     const sesiPilih = sesiHariIni.filter((s) => keadaan.dipilih.has(s.id));
     const uniq = (a) => [...new Set(a)];
     const g = jd.guru[keadaan.guruId];
@@ -253,11 +319,13 @@
     try {
       if (keadaan.jenis === 'pautan') {
         const url = bersihUrl($('url').value);
-        await tambahBahan({ ...asas, jenis: 'pautan', url, nama: $('tajuk').value.trim() || new URL(url).hostname.replace(/^www\./, ''), fileId: null });
+        idBaru.add(await tambahBahan({ ...asas, jenis: 'pautan', url, nama: $('tajuk').value.trim() || new URL(url).hostname.replace(/^www\./, ''), fileId: null }));
         berjaya = 1;
       } else {
-        for (const x of keadaan.fail) {
-          if (x.ralat || x.siap) continue;
+        const giliran = keadaan.fail.filter((x) => !x.ralat && !x.siap);
+        for (const x of giliran) {
+          const ke = giliran.indexOf(x) + 1;
+          setButang(giliran.length > 1 ? `Memuat naik ${ke}/${giliran.length}…` : 'Memuat naik…');
           x.sedang = true; x.status = 'Memproses…'; lukisFail();
           try {
             const fail = await kecilkanGambar(x.f);
@@ -265,7 +333,7 @@
             x.status = 'Memuat naik…'; lukisFail();
             const folderGuru = g ? `${g.ringkas} - ${g.nama}` : 'LAIN-LAIN';
             const r = await hantarFail(fail, { tarikh: asas.tarikh, kelas: kelasUtama, guru: folderGuru, awalan }, tetapan.appsScriptUrl);
-            await tambahBahan({ ...asas, jenis: 'fail', url: r.url, nama: x.f.name, fileId: r.id });
+            idBaru.add(await tambahBahan({ ...asas, jenis: 'fail', url: r.url, nama: x.f.name, fileId: r.id }));
             x.siap = true; x.status = 'Siap'; berjaya++;
           } catch (e) {
             console.error(e);
@@ -277,24 +345,36 @@
     } catch (e) {
       console.error(e);
       toast(mesejRalat(e), 'ralat');
-      btn.disabled = false;
+      selesaiGagal();
       return;
     }
 
-    if (gagal && !berjaya) { toast('Muat naik gagal. Semak senarai fail.', 'ralat'); btn.disabled = false; return; }
+    if (gagal && !berjaya) { toast('Muat naik gagal. Semak senarai fail.', 'ralat'); selesaiGagal(); return; }
+    sedangHantar = false;
     const kelasSlug = jd.kelas[asas.kelasIds[0]]?.slug;
-    el.innerHTML = `
-      <div class="kad kotak-masuk">
-        <div style="font-size:2.6rem">🎉</div>
-        <h2>Berjaya dihantar</h2>
-        <p class="lembut">${berjaya} bahan untuk ${asas.sesi.length} sesi pada ${esc(formatTarikh(asas.tarikh))}.${gagal ? ` <b>${gagal} fail gagal.</b>` : ''}</p>
-        <div class="butang-baris" style="justify-content:center">
-          <a class="btn" href="index.html?m=${asas.tarikh}">Kembali ke Jadual Saya</a>
-          <a class="btn kedua" href="upload.html?t=${asas.tarikh}${asas.bagiPihak ? '&g=' + asas.guruId : ''}">Upload lagi</a>
-          <a class="btn kedua" href="../kelas.html?k=${kelasSlug}&t=${asas.tarikh}" target="_blank">Lihat halaman kelas</a>
+    $('notis-berjaya').innerHTML = `
+      <div class="notis berjaya-besar" role="status">
+        <div style="font-size:1.6rem;line-height:1">✅</div>
+        <div style="flex:1">
+          <b>Berjaya dihantar!</b> ${berjaya} bahan untuk ${asas.sesi.length} sesi pada ${esc(formatTarikh(asas.tarikh))}.${gagal ? ` <b style="color:var(--bahaya)">${gagal} fail gagal. Semak senarai fail dan cuba hantar semula.</b>` : ''}
+          <div class="kecil" style="margin-top:4px">Bahan kini dipaparkan di halaman kelas.
+            <a href="../kelas.html?k=${kelasSlug}&t=${asas.tarikh}" target="_blank">Lihat halaman kelas →</a> · <a href="index.html?m=${asas.tarikh}">Jadual Saya →</a></div>
         </div>
+        <button class="ik-btn" onclick="this.parentElement.remove()" title="Tutup">${ikon('tutup', 16)}</button>
       </div>`;
+    toast('Berjaya dihantar ✓');
+    // Kosongkan borang (fail yang gagal dikekalkan untuk dicuba semula)
+    keadaan.fail = keadaan.fail.filter((x) => x.ralat && !x.siap).map((x) => ({ f: x.f, ralat: '' }));
+    $('url').value = ''; $('tajuk').value = '';
+    if (!gagal) { $('catatan').value = ''; keadaan.dipilih.clear(); }
+    btn.innerHTML = BTN_ASAL;
+    lukisFail();
+    await muatSesi();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  // Amaran jika guru cuba tutup / tinggalkan halaman semasa muat naik
+  window.addEventListener('beforeunload', (e) => { if (sedangHantar) { e.preventDefault(); e.returnValue = ''; } });
 
   muatSesi();
 </script>

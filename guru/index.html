@@ -35,7 +35,7 @@
 <script type="module">
   import { kawal, guruDilihat } from '../assets/js/auth.js';
   import { pasangApp, pasangJalurLihat, esc, ikon, namaCantik, hariIni, tambahHari, isninMinggu, formatTarikh } from '../assets/js/ui.js';
-  import { muatJadual, muatJadualUntuk, kalendarPdpr, kelasTerlibat, bahanJulat, petaSiap, hantaranJulat, kiraHantaran } from '../assets/js/data.js';
+  import { muatJadual, muatJadualUntuk, kalendarPdpr, kelasTerlibat, bahanJulat, petaSiapGuru, siapUntuk, modKongsi, muatTetapan, hantaranJulat, kiraHantaran } from '../assets/js/data.js';
   import { sesiHari, HARI, labelWaktu, gabungKamus } from '../assets/js/jadual.js';
 
   const sesiAuth = await kawal('guru', { perluGuru: true });
@@ -81,22 +81,27 @@
     $('label-minggu').textContent = `${formatTarikh(tarikh[0], 'pendek').replace(/^\S+\s/, '')} – ${formatTarikh(tarikh[4], 'pendek').replace(/^\S+\s/, '')}`;
     $('isi').innerHTML = `<p class="memuat">Memuatkan…</p>`;
 
-    const [status, bahan, jMap, hantaran] = await Promise.all([kalendarPdpr(tarikh[0], tarikh[4], tarikh), bahanJulat(tarikh[0], tarikh[4], GID), muatJadualUntuk(tarikh),
-      hantaranJulat(tarikh[0], tarikh[4], GID).catch(() => [])]);
+    const [status, bahan, jMap, hantaran, tetapan] = await Promise.all([kalendarPdpr(tarikh[0], tarikh[4], tarikh), bahanJulat(tarikh[0], tarikh[4], GID), muatJadualUntuk(tarikh),
+      hantaranJulat(tarikh[0], tarikh[4], GID).catch(() => []), muatTetapan()]);
+    const MOD = modKongsi(tetapan);
     const nMurid = kiraHantaran(hantaran); // { 'tarikh|sesi': bilangan murid }
     const K = gabungKamus([...Object.values(jMap), jadual]); // nama dari semua versi yang terlibat
-    const siap = petaSiap(bahan);
+    const siap = petaSiapGuru(bahan);
+    const kodGuru = (ids) => ids.map((g) => K.guru[g]?.ringkas || '?').join(', ');
 
     // Bina data sesi + keadaan
     let jumlah = 0, diisi = 0, hariIniBelum = 0;
     const hari = tarikh.map((t, h) => {
       const sesi = sesiHari(jMap[t], h, { guruId: GID }).map((s) => {
         const pdpr = kelasTerlibat(status[t], s.kelas);
-        const ada = siap[t]?.has(s.id);
-        const keadaan = !pdpr ? 'bukan' : ada ? 'ada' : 'belum';
+        const st = siapUntuk(siap, t, s.id, GID, MOD);
+        const ada = st.siap;
+        // 'rakan' = dikira siap kerana guru lain (slot berkongsi) sudah upload
+        const keadaan = !pdpr ? 'bukan' : ada ? (st.sendiri ? 'ada' : 'rakan') : 'belum';
+        const olehLain = !st.sendiri && st.oleh.length ? kodGuru(st.oleh) : '';
         if (pdpr) { jumlah++; if (ada) diisi++; else if (t === kini) hariIniBelum++; }
         const bilBahan = bahan.filter((b) => b.tarikh === t && (b.sesi || []).includes(s.id));
-        return { ...s, keadaan, bahan: bilBahan, murid: nMurid[t + '|' + s.id] || 0 };
+        return { ...s, keadaan, olehLain, bahan: bilBahan, murid: nMurid[t + '|' + s.id] || 0 };
       });
       return { t, h, status: status[t], sesi, belum: sesi.filter((s) => s.keadaan === 'belum').length };
     });
@@ -133,7 +138,8 @@
           const tag = s.keadaan === 'bukan' || LIHAT ? 'div' : 'a';
           return `<${tag} class="gm-sesi ${s.keadaan}" style="flex:1" ${tag === 'a' ? `href="${pautanUpload(d.t, s)}"` : ''}
             title="${esc(namaSubjek(s, true))} · ${esc(namaKelas(s))} · ${s.harian ? 'Sepanjang hari' : s.mula + '–' + s.tamat}">
-            <b>${esc(namaKelas(s))}</b><span>${esc(namaSubjek(s))}${s.kumpulan.length ? ' · ' + esc(s.kumpulan.join('/')) : ''}${s.murid ? ` · 📥${s.murid}` : ''}</span></${tag}>`;
+            <b>${esc(namaKelas(s))}</b><span>${esc(namaSubjek(s))}${s.kumpulan.length ? ' · ' + esc(s.kumpulan.join('/')) : ''}${s.murid ? ` · 📥${s.murid}` : ''}</span>
+            ${s.olehLain && s.keadaan !== 'bukan' ? `<span class="oleh">${s.keadaan === 'rakan' ? '✓ oleh' : 'Sudah oleh'} ${esc(s.olehLain)}</span>` : ''}</${tag}>`;
         }).join('') + `</div>`;
       }
     }
@@ -142,6 +148,7 @@
         <div class="grid-minggu">${g}</div>
         <div class="petunjuk">
           <span><i style="background:var(--utama-cair);border:1px solid #b7dccd"></i>Sudah diisi</span>
+          <span><i style="background:var(--utama-cair);border:1px dashed #8fc4b0"></i>Diisi oleh guru lain (slot berkongsi)</span>
           <span><i style="background:var(--aksen-cair);border:1px solid #f1d29e"></i>Belum diisi</span>
           <span><i style="background:var(--kelabu-cair)"></i>Bukan hari PDPR</span>
         </div>
@@ -175,12 +182,13 @@
           const tag = s.keadaan === 'bukan' || LIHAT ? 'div' : 'a';
           const ket = s.keadaan === 'ada'
             ? `<span class="lencana">✓ ${s.bahan.length} bahan</span>`
-            : s.keadaan === 'belum' ? `<span class="lencana amaran">${ikon('upload', 14)} Belum diisi</span>` : `<span class="lencana tiada">Bukan PDPR</span>`;
+            : s.keadaan === 'rakan' ? `<span class="lencana rakan">✓ Diisi oleh ${esc(s.olehLain)}</span>`
+            : s.keadaan === 'belum' ? `<span class="lencana amaran">${ikon('upload', 14)} Belum diisi</span>${s.olehLain ? ` <span class="lencana tiada">${esc(s.olehLain)} sudah upload</span>` : ''}` : `<span class="lencana tiada">Bukan PDPR</span>`;
           return pisah + `<${tag} class="sesi ${s.keadaan}" ${tag === 'a' ? `href="${pautanUpload(d.t, s)}"` : ''}>
             <div class="masa"><b>${s.mula}</b><small>${s.tamat}</small><small>${labelWaktu(s.waktu).replace('Waktu ', 'W')}</small></div>
             <div class="isi"><h3>${esc(namaKelas(s))} · ${esc(namaSubjek(s))}</h3>
               <div class="meta">${esc(namaSubjek(s, true))}${s.kumpulan.length ? ' · ' + esc(s.kumpulan.join(' & ')) : ''}${s.guru.length > 1 ? ' · dikongsi ' + s.guru.length + ' guru' : ''}</div>
-              ${ket}${s.murid ? ` <span class="lencana tiada">📥 ${s.murid} murid hantar kerja</span>` : ''}</div></${tag}>`;
+              ${ket}${s.murid ? ` <span class="lencana hantar-murid">📥 ${s.murid} murid hantar kerja</span>` : ''}</div></${tag}>`;
         }).join('') + `</div>`;
       }
       $('senarai-hari').innerHTML = html;

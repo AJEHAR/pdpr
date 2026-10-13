@@ -50,7 +50,7 @@
 <script type="module">
   import { kawal } from '../assets/js/auth.js';
   import { pasangApp, esc, ikon, namaCantik, hariIni, tambahHari, isninMinggu, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
-  import { muatJadualUntuk, kalendarPdpr, kelasTerlibat, bahanJulat, hantaranJulat, petaSiap, muatTetapan } from '../assets/js/data.js';
+  import { muatJadualUntuk, kalendarPdpr, kelasTerlibat, bahanJulat, hantaranJulat, petaSiap, petaSiapGuru, siapUntuk, modKongsi, muatTetapan } from '../assets/js/data.js';
   import { sesiHari, indeksHari, gabungKamus } from '../assets/js/jadual.js';
 
   const sesiAuth = await kawal('admin');
@@ -97,6 +97,7 @@
       const K = gabungKamus(Object.values(jMap));
       const hariPdpr = semua.filter((t) => status[t].aktif);
       const siap = petaSiap(bahan);
+      const siapG = petaSiapGuru(bahan), MOD = modKongsi(tetapan);
       const hantarSesi = {};
       hantaran.forEach((h) => ((hantarSesi[h.tarikh + '|' + h.sesi] ??= []).push(h)));
 
@@ -117,7 +118,7 @@
         r.murid.forEach((m) => b.murid.add(r.s.kelas + '|' + m));
       };
       for (const r of rekod) {
-        if (v === 'guru') r.s.guru.forEach((g) => tambah(g, r));
+        if (v === 'guru') r.s.guru.forEach((g) => tambah(g, { ...r, ada: siapUntuk(siapG, r.t, r.s.id, g, MOD).siap }));
         else if (v === 'kelas') tambah(r.s.kelas, r);
         else tambah(r.t, r);
       }

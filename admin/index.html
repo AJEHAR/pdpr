@@ -34,7 +34,7 @@
 <script type="module">
   import { kawal } from '../assets/js/auth.js';
   import { pasangApp, esc, ikon, namaCantik, hariIni, hariBekerja, tambahHari, formatTarikh } from '../assets/js/ui.js';
-  import { muatJadual, statusPdpr, kelasTerlibat, bahanTarikh, petaSiap, senarai, hantaranJulat } from '../assets/js/data.js';
+  import { muatJadual, statusPdpr, kelasTerlibat, bahanTarikh, petaSiap, petaSiapGuru, siapUntuk, modKongsi, muatTetapan, senarai, hantaranJulat } from '../assets/js/data.js';
   import { sesiHari, indeksHari, labelWaktu } from '../assets/js/jadual.js';
 
   const sesiAuth = await kawal('admin');
@@ -63,7 +63,8 @@
     const h = indeksHari(t);
     if (h < 0) { $('statistik').innerHTML = ''; $('isi').innerHTML = `<div class="kosong"><div class="ikon">🌤️</div><p>Hujung minggu.</p></div>`; return; }
 
-    const [status, bahan, jd, hantaran] = await Promise.all([statusPdpr(t), bahanTarikh(t), muatJadual(t), hantaranJulat(t, t).catch(() => [])]);
+    const [status, bahan, jd, hantaran, tetapan] = await Promise.all([statusPdpr(t), bahanTarikh(t), muatJadual(t), hantaranJulat(t, t).catch(() => []), muatTetapan()]);
+    const MOD = modKongsi(tetapan);
     jadual = jd;
     if (!status.aktif) {
       $('statistik').innerHTML = '';
@@ -71,6 +72,7 @@
       return;
     }
     const siap = petaSiap(bahan)[t] || new Set();
+    const siapG = petaSiapGuru(bahan);
     const sesi = sesiHari(jadual, h).filter((s) => kelasTerlibat(status, s.kelas)).map((s) => ({ ...s, ada: siap.has(s.id) }));
     const diisi = sesi.filter((s) => s.ada).length;
     const pc = sesi.length ? Math.round((diisi / sesi.length) * 100) : 0;
@@ -84,9 +86,9 @@
       <div class="stat"><small>Bahan dimuat naik</small><b>${bahan.length}</b>${bagiPihak ? `<small>${bagiPihak} oleh guru ganti</small>` : ''}</div>
       <div class="stat"><small>Murid hantar kerja</small><b>${new Set(hantaran.map((x) => x.kelasId + '|' + (x.namaMurid || '').trim().toUpperCase())).size}</b><small><a href="../guru/kerja.html?t=${t}">Lihat kerja murid →</a></small></div>`;
 
-    // Ikut guru (sesi dikongsi dikira untuk setiap guru)
+    // Ikut guru (slot berkongsi ikut tetapan: satu upload cukup / setiap guru upload sendiri)
     const ikutGuru = {};
-    for (const s of sesi) for (const g of s.guru) (ikutGuru[g] ??= []).push(s);
+    for (const s of sesi) for (const g of s.guru) (ikutGuru[g] ??= []).push({ ...s, ada: siapUntuk(siapG, t, s.id, g, MOD).siap });
     // Ikut kelas
     const ikutKelas = {};
     for (const s of sesi) (ikutKelas[s.kelas] ??= []).push(s);

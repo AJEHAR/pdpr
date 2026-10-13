@@ -491,3 +491,31 @@ a.sesi:hover { border-color: var(--utama-2); }
 @media (display-mode: standalone) { .topbar { padding-top: max(10px, env(safe-area-inset-top)); } .app-atas { padding-top: max(10px, env(safe-area-inset-top)); } }
 /* ---------- Ruang Drive ---------- */
 .ruang-drive .bar-maju { height: 10px; }
+
+/* Pantau Guru: cip sesi harian */
+.cip-sesi { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.sesi-cip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 99px; font-size: .75rem; line-height: 1.5; border: 1px solid var(--garis); white-space: nowrap; }
+.sesi-cip small { opacity: .7; font-size: .7rem; }
+.sesi-cip.ok { background: color-mix(in srgb, var(--utama-2) 12%, transparent); border-color: color-mix(in srgb, var(--utama-2) 35%, transparent); color: var(--utama); }
+.sesi-cip.belum { background: color-mix(in srgb, var(--bahaya) 8%, transparent); border-color: color-mix(in srgb, var(--bahaya) 30%, transparent); color: var(--bahaya); }
+
+.pilihan-radio { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--garis); border-radius: 12px; margin-top: 8px; cursor: pointer; }
+.pilihan-radio:has(input:checked) { border-color: var(--utama-2); background: var(--utama-cair); }
+.pilihan-radio input { margin-top: 4px; accent-color: var(--utama); }
+.sesi-cip.rakan { background: color-mix(in srgb, var(--utama-2) 6%, transparent); border-style: dashed; border-color: color-mix(in srgb, var(--utama-2) 45%, transparent); color: var(--utama); }
+.lencana.rakan { background: transparent; border: 1px dashed #8fc4b0; }
+.gm-sesi.rakan { background: var(--utama-cair); border: 1px dashed #8fc4b0; }
+.gm-sesi .oleh { display: block; font-size: .68rem; opacity: .8; }
+.lencana.hantar-murid { background: #e8f0fb; color: #2b5797; }
+.sesi.rakan .masa { background: var(--utama-cair); color: var(--utama); }
+.gm-sesi.rakan b::after { content: ' ✓'; color: var(--utama-2); }
+/* Upload Bahan: notis berjaya & senarai bahan hari */
+.notis.berjaya-besar { display: flex; gap: 12px; align-items: flex-start; background: var(--utama-cair); color: var(--utama); border: 1px solid #b7dccd; animation: naik .3s ease; }
+.notis.berjaya-besar a { color: var(--utama); font-weight: 700; }
+.senarai-bahan-hari { margin-top: 16px; }
+.bahan-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--bg); margin-bottom: 6px; }
+.bahan-item .ikon { font-size: 1.3rem; flex: none; }
+.bahan-item .isi { flex: 1; min-width: 0; }
+.bahan-item .isi a { font-weight: 700; color: var(--teks); text-decoration: none; word-break: break-word; }
+.bahan-item .isi a:hover { color: var(--utama); text-decoration: underline; }
+.bahan-item.baru { background: var(--utama-cair); outline: 1px solid #b7dccd; }
