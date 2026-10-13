@@ -120,3 +120,18 @@ export async function bukaKerjaMurid(fileId, url) {
   const bait = Uint8Array.from(atob(j.data), (c) => c.charCodeAt(0));
   return new Blob([bait], { type: j.mime || 'application/octet-stream' });
 }
+
+/** Ibu bapa memadam fail kerja yang dihantar dari telefon ini (Drive → Trash) */
+export async function padamKerjaMurid(fileId, url) {
+  if (MOD_DEMO || !url || !fileId) return;
+  try {
+    const { token } = await tokenTanpaNama();
+    await fetch(url, {
+      method: 'POST',
+      body: JSON.stringify({ aksi: 'padamMurid', token, id: fileId }),
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    });
+  } catch (e) {
+    console.warn('Gagal buang fail kerja murid', e);
+  }
+}

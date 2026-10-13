@@ -286,6 +286,31 @@ a.sesi:hover { border-color: var(--utama-2); }
 .bahan .ikon { flex: none; font-size: 1.15rem; }
 .bahan .catatan { font-weight: 400; color: var(--lembut); font-size: .82rem; display: block; }
 .belum-teks { font-size: .85rem; color: var(--lembut); font-style: italic; }
+.pusing { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: pusing .7s linear infinite; vertical-align: -2px; margin-right: 6px; flex: none; }
+.pusing.putih { width: 18px; height: 18px; border-color: #fff; border-right-color: transparent; margin-right: 0; }
+@keyframes pusing { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pusing { animation-duration: 2s; } }
+.btn.memuat, .btn.memuat[disabled] { opacity: 1 !important; cursor: progress !important; background: var(--utama-2); color: #fff; }
+.btn.memuat span { color: #fff; }
+.btn.bahaya.memuat, .btn.bahaya.memuat[disabled] { background: var(--bahaya-cair); color: var(--bahaya); }
+.btn.bahaya.memuat span { color: var(--bahaya); }
+.fi-thumb { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; flex: none; background: #ddd; }
+.pratonton-kerja { margin-top: 14px; border: 1px solid var(--garis); border-radius: 14px; padding: 12px; background: var(--bg); }
+.pratonton-kerja.sorot { border-color: #b7dccd; background: var(--utama-cair); }
+.pratonton-kerja.sorot .pk-kepala b { color: var(--utama); }
+.pk-kepala { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.pk-senarai { display: flex; flex-direction: column; gap: 8px; max-height: 42vh; overflow-y: auto; }
+.pk-item { display: flex; align-items: center; gap: 10px; background: var(--kad); border: 1px solid var(--garis); border-radius: 12px; padding: 8px; }
+.pk-item.baru { border-color: var(--utama-2); }
+.pk-thumb { width: 64px; height: 64px; border-radius: 10px; object-fit: cover; flex: none; background: #ddd; }
+.pk-ikon { width: 64px; height: 64px; border-radius: 10px; display: grid; place-items: center; background: var(--utama-cair); color: var(--utama); flex: none; }
+.pk-teks { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pk-teks b { font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pk-teks small { color: var(--lembut); font-size: .76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 420px) { .pk-item .btn span { display: none; } .pk-item .btn { padding: 8px 10px; } }
+.kerja-item { display: inline-flex; gap: 3px; margin: 2px 6px 2px 0; }
+.kerja-item .btn.bahaya { padding: 7px 9px; }
+.cip-hantar { cursor: pointer; border: 0; font: inherit; }
 .hantar-baris { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--garis); }
 .borang-kerja { z-index: 50; }
 @media (min-width: 700px) {

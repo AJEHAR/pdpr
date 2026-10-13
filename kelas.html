@@ -144,7 +144,7 @@
               ${terlibat ? (b.length ? `<div class="bahan">${b.map(kadBahan).join('')}</div>` : `<span class="belum-teks">Bahan belum dimuat naik</span>`) : ''}
               ${terlibat ? `<div class="hantar-baris">
                 <button class="btn kecil" data-hantar="${esc(s.id)}">📤 Hantar kerja</button>
-                ${hantaranPeranti(tarikh, s.id).map((x) => `<span class="lencana">✓ ${esc(x.nama)}${x.n > 1 ? ` (${x.n})` : ''}</span>`).join('')}
+                ${hantaranPeranti(tarikh, s.id).map((x) => `<button type="button" class="lencana cip-hantar" data-hantar="${esc(s.id)}" title="Lihat / padam kerja yang dihantar">✓ ${esc(x.nama)}${x.n > 1 ? ` (${x.n})` : ''}</button>`).join('')}
               </div>` : ''}
             </div>
           </article>`;

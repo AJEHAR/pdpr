@@ -49,6 +49,7 @@ function doPost(e) {
 
     // Kerja murid: ibu bapa/murid (log masuk tanpa nama) — tiada semakan profil
     if (req.aksi === 'murid') return jawab(simpanMurid(req, pengguna));
+    if (req.aksi === 'padamMurid') return jawab(padamMurid(req, pengguna));
 
     const profil = bacaProfil(req.token, pengguna.uid);
     if (!profil || profil.status !== 'lulus') throw new Error('Akaun belum diluluskan admin.');
@@ -78,6 +79,16 @@ function simpanMurid(req, pengguna) {
   const fail = folder.createFile(blob);
   fail.setDescription(JSON.stringify({ jenis: 'murid', uid: pengguna.uid, namaMurid: nama, masa: new Date().toISOString() }));
   return { ok: true, id: fail.getId() };
+}
+
+/** Ibu bapa memadam kerja yang dihantar dari telefon yang sama (uid tanpa nama mesti sepadan) */
+function padamMurid(req, pengguna) {
+  const fail = DriveApp.getFileById(req.id);
+  let meta = {};
+  try { meta = JSON.parse(fail.getDescription() || '{}'); } catch (e) {}
+  if (meta.jenis !== 'murid' || meta.uid !== pengguna.uid) throw new Error('Kerja ini tidak boleh dipadam dari telefon ini.');
+  fail.setTrashed(true);
+  return { ok: true };
 }
 
 /** Guru/admin melihat fail kerja murid (fail peribadi dihantar melalui skrip ini) */
@@ -145,10 +156,11 @@ function simpan(req, pengguna) {
 
 function padam(req, pengguna, profil) {
   const fail = DriveApp.getFileById(req.id);
-  let pemilik = '';
-  try { pemilik = JSON.parse(fail.getDescription() || '{}').uid; } catch (e) {}
+  let meta = {};
+  try { meta = JSON.parse(fail.getDescription() || '{}'); } catch (e) {}
   const admin = profil.role === 'admin' || profil.role === 'superadmin';
-  if (pemilik !== pengguna.uid && !admin) throw new Error('Anda bukan pemilik fail ini.');
+  // Kerja murid: mana-mana guru yang diluluskan boleh memadam (cth tersalah hantar)
+  if (meta.uid !== pengguna.uid && !admin && meta.jenis !== 'murid') throw new Error('Anda bukan pemilik fail ini.');
   fail.setTrashed(true);
   return { ok: true };
 }

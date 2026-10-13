@@ -27,9 +27,9 @@
 <script type="module">
   import { kawal, adalahAdmin } from '../assets/js/auth.js';
   import { pasangApp, esc, ikon, hariIni, hariBekerja, tambahHari, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
-  import { muatJadual, statusPdpr, kelasTerlibat, hantaranJulat, muatTetapan } from '../assets/js/data.js';
+  import { muatJadual, statusPdpr, kelasTerlibat, hantaranJulat, muatTetapan, buang } from '../assets/js/data.js';
   import { sesiHari, indeksHari, labelWaktu } from '../assets/js/jadual.js';
-  import { bukaKerjaMurid } from '../assets/js/upload.js';
+  import { bukaKerjaMurid, buangFail } from '../assets/js/upload.js';
 
   const sesiAuth = await kawal('guru');
   await pasangApp('guru/kerja.html', sesiAuth);
@@ -98,9 +98,9 @@
           <thead><tr><th>Murid</th><th>Kerja</th><th>Catatan</th></tr></thead>
           <tbody>${Object.entries(kump).map(([, xs]) => `<tr>
             <td><b>${esc(xs[0].namaMurid)}</b><div class="kecil lembut">${masaPendek(xs[0].masa)}</div></td>
-            <td data-label="Kerja">${xs.map((x) => x.jenis === 'pautan'
-              ? `<a href="${esc(x.url)}" target="_blank" rel="noopener" class="btn kedua kecil" style="margin:2px">${ikon('pautan', 14)} Pautan</a>`
-              : `<button class="btn kedua kecil" style="margin:2px" data-fail="${esc(x.fileId)}" title="${esc(x.namaFail)}">${ikon('fail', 14)} ${esc((x.namaFail || 'Fail').slice(0, 22))}</button>`).join('')}</td>
+            <td data-label="Kerja">${xs.map((x) => `<span class="kerja-item">${x.jenis === 'pautan'
+              ? `<a href="${esc(x.url)}" target="_blank" rel="noopener" class="btn kedua kecil">${ikon('pautan', 14)} Pautan</a>`
+              : `<button class="btn kedua kecil" data-fail="${esc(x.fileId)}" title="${esc(x.namaFail)}">${ikon('fail', 14)} ${esc((x.namaFail || 'Fail').slice(0, 22))}</button>`}<button class="btn bahaya kecil" data-padam="${esc(x.id)}" title="Padam (tersalah hantar)" aria-label="Padam ${esc(x.namaFail || 'pautan')} oleh ${esc(x.namaMurid)}">${ikon('sampah', 14)}</button></span>`).join('')}</td>
             <td data-label="Catatan" class="kecil">${esc([...new Set(xs.map((x) => x.catatan).filter(Boolean))].join(' · ') || '—')}</td>
           </tr>`).join('')}</tbody></table></div>`
           : `<p class="belum-teks" style="margin:0">Belum ada kerja dihantar.</p>`}
@@ -111,6 +111,8 @@
 
   // Buka fail peribadi melalui Apps Script
   $('isi').onclick = async (e) => {
+    const p = e.target.closest('[data-padam]');
+    if (p) return padam(p);
     const b = e.target.closest('[data-fail]');
     if (!b) return;
     const tetingkap = window.open('', '_blank'); // buka segera (elak penyekat pop-up)
@@ -126,6 +128,24 @@
     }
     b.disabled = false; b.innerHTML = asal;
   };
+
+  // Padam kerja murid yang tersalah hantar (rekod + fail Drive ke Trash)
+  async function padam(b) {
+    const x = data.find((y) => y.id === b.dataset.padam);
+    if (!x) return;
+    if (!confirm(`Padam kerja "${x.namaFail || x.url || 'ini'}" oleh ${x.namaMurid}?\n\nGunakan untuk kerja yang tersalah hantar (salah sesi, salah murid atau fail rosak).`)) return;
+    b.disabled = true;
+    b.innerHTML = '<i class="pusing"></i>';
+    try {
+      await buang('hantaran', x.id);
+      if (x.fileId) buangFail(x.fileId, (await tetapanP).appsScriptUrl);
+      toast('Kerja murid dipadam');
+      muat();
+    } catch (err) {
+      toast(mesejRalat(err), 'ralat');
+      b.disabled = false; b.innerHTML = ikon('sampah', 14);
+    }
+  }
 
   $('tarikh').onchange = muat;
   $('kelas').onchange = muat;
