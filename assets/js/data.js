@@ -465,3 +465,79 @@ export async function maklumanAktif(sasaran) {
   return xs.filter((m) => (m.sasaran === 'semua' || m.sasaran === sasaran) && (!m.mula || m.mula <= t) && (!m.tamat || m.tamat >= t))
     .sort((a, b) => (a.jenis === 'penting' ? -1 : 0) - (b.jenis === 'penting' ? -1 : 0) || (b.masa || '').localeCompare(a.masa || ''));
 }
+
+// ------------------------------------------------------------
+//  Cuti & Urusan Rasmi guru
+//    ketiadaan/{guruId_tarikh}      AWAM   { guruId, tarikh, waktu: null | [no…] }      → sembunyi slot di halaman kelas
+//    ketiadaanInfo/{guruId_tarikh}  PERIBADI { guruId, tarikh, waktu, jenis:'cuti'|'rasmi', catatan, uid, olehNama, masa }
+//  Satu dokumen bagi setiap guru setiap hari (rekod baharu menggantikan yang lama).
+//  waktu = null → sepanjang hari; [6,7,8] → waktu tertentu sahaja.
+// ------------------------------------------------------------
+export const JENIS_TIADA = { cuti: 'Cuti', rasmi: 'Rasmi' };
+const idTiada = (guruId, tarikh) => `${guruId}_${tarikh}`;
+
+/** Rekod awam (tanpa sebab) bagi julat tarikh — untuk halaman kelas & pengiraan */
+export async function tiadaJulat(dari, hingga) {
+  const tapis = dari === hingga ? [['tarikh', '==', dari]] : [['tarikh', '>=', dari], ['tarikh', '<=', hingga]];
+  return senarai('ketiadaan', tapis).catch((e) => { console.warn('[PDPR] Gagal baca ketiadaan', e); return []; });
+}
+
+/**
+ * Rekod penuh (dengan jenis Cuti/Rasmi). Admin: semua guru. Guru: hanya rekod sendiri (beri guruId).
+ * Jika gagal (tiada kebenaran), kembalikan [] — paparan jatuh balik kepada rekod awam.
+ */
+export async function infoTiadaJulat(dari, hingga, guruId = null) {
+  try {
+    const xs = guruId ? await senarai('ketiadaanInfo', [['guruId', '==', guruId]])
+      : await senarai('ketiadaanInfo', dari === hingga ? [['tarikh', '==', dari]] : [['tarikh', '>=', dari], ['tarikh', '<=', hingga]]);
+    return xs.filter((x) => x.tarikh >= dari && x.tarikh <= hingga);
+  } catch (e) { console.warn('[PDPR] Gagal baca ketiadaanInfo', e); return []; }
+}
+
+/** Simpan rekod bagi beberapa tarikh sekaligus (maks 200 hari) */
+export async function simpanTiada({ guruId, tarikh, jenis, waktu = null, catatan = '', uid, olehNama }) {
+  const masa = new Date().toISOString();
+  const kumpulan = Date.now().toString(36);
+  const ops = [];
+  for (const t of tarikh.slice(0, 200)) {
+    const id = idTiada(guruId, t);
+    ops.push({ kol: 'ketiadaan', id, data: { guruId, tarikh: t, waktu } });
+    ops.push({ kol: 'ketiadaanInfo', id, data: { guruId, tarikh: t, waktu, jenis, catatan, uid, olehNama, masa, kumpulan } });
+  }
+  for (let i = 0; i < ops.length; i += 400) await kelompok(ops.slice(i, i + 400));
+}
+
+export async function padamTiada(senaraiRekod) {
+  const ops = senaraiRekod.flatMap((r) => [{ kol: 'ketiadaan', id: idTiada(r.guruId, r.tarikh), padam: true }, { kol: 'ketiadaanInfo', id: idTiada(r.guruId, r.tarikh), padam: true }]);
+  for (let i = 0; i < ops.length; i += 400) await kelompok(ops.slice(i, i + 400));
+}
+
+/**
+ * Peta ketiadaan: { tarikh: { guruId: { waktu, jenis } } }
+ * @param awam  rekod dari tiadaJulat
+ * @param info  (pilihan) rekod dari infoTiadaJulat — menambah 'jenis'
+ */
+export function petaTiada(awam = [], info = []) {
+  const p = {};
+  for (const r of awam) ((p[r.tarikh] ??= {})[r.guruId] = { waktu: r.waktu ?? null, jenis: null });
+  for (const r of info) ((p[r.tarikh] ??= {})[r.guruId] = { waktu: r.waktu ?? null, jenis: r.jenis || null });
+  return p;
+}
+
+/**
+ * Adakah guru tiada semasa sesi ini?
+ * Sepanjang hari → ya. Waktu tertentu → ya jika bertindih dengan waktu sesi (sesi harian prasekolah: hanya jika sepanjang hari).
+ * @returns {null | { jenis: 'cuti'|'rasmi'|null }}
+ */
+export function guruTiada(peta, t, guruId, sesi) {
+  const r = peta[t]?.[guruId];
+  if (!r) return null;
+  if (!r.waktu || !r.waktu.length) return r;
+  if (sesi?.harian || !sesi?.waktu?.length) return null;
+  return sesi.waktu.some((w) => r.waktu.includes(w)) ? r : null;
+}
+
+/** Semua guru sesi ini tiada? (untuk sembunyi slot di halaman awam) */
+export function sesiTiadaGuru(peta, t, sesi) {
+  return sesi.guru.length > 0 && sesi.guru.every((g) => guruTiada(peta, t, g, sesi));
+}

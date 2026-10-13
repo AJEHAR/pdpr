@@ -54,6 +54,7 @@
       <div class="tab-segmen" role="tablist" id="penapis">
         <button data-p="semua" aria-selected="true">Semua</button>
         <button data-p="belum">Belum lengkap</button>
+        <button data-p="cuti">Cuti / Rasmi</button>
         <button data-p="tiada">Belum daftar</button>
       </div>
     </div>
@@ -65,7 +66,7 @@
 <script type="module">
   import { kawal } from '../assets/js/auth.js';
   import { pasangApp, esc, ikon, namaCantik, hariIni, hariBekerja, tambahHari, formatTarikh } from '../assets/js/ui.js';
-  import { muatJadual, statusPdpr, kelasTerlibat, bahanTarikh, petaSiapGuru, siapUntuk, modKongsi, muatTetapan, senarai } from '../assets/js/data.js';
+  import { muatJadual, statusPdpr, kelasTerlibat, bahanTarikh, petaSiapGuru, siapUntuk, modKongsi, muatTetapan, senarai, tiadaJulat, infoTiadaJulat, petaTiada, guruTiada, JENIS_TIADA } from '../assets/js/data.js';
   import { sesiHari, indeksHari, labelWaktu } from '../assets/js/jadual.js';
   import { ikonCari } from '../assets/js/cari-kelas.js';
 
@@ -98,8 +99,10 @@
     $('isi').innerHTML = `<p class="memuat">Memuatkan…</p>`;
     const h = indeksHari(tarikh);
 
-    const [status, bahan, jd, tetapan] = await Promise.all([statusPdpr(tarikh), bahanTarikh(tarikh), muatJadual(tarikh), muatTetapan()]);
+    const [status, bahan, jd, tetapan, tAwam, tInfo] = await Promise.all([statusPdpr(tarikh), bahanTarikh(tarikh), muatJadual(tarikh), muatTetapan(),
+      tiadaJulat(tarikh, tarikh), infoTiadaJulat(tarikh, tarikh)]);
     const siap = petaSiapGuru(bahan), MOD = modKongsi(tetapan);
+    const tiada = petaTiada(tAwam, tInfo);
     const pdpr = !!status?.aktif;
     $('info-hari').innerHTML = !pdpr
       ? `<div class="notis amaran">${esc(formatTarikh(tarikh))} bukan hari PDPR. Tiada sesi untuk disemak.</div>`
@@ -109,23 +112,28 @@
       const sesi = pdpr && h >= 0 ? sesiHari(jd, h, { guruId: gid }).filter((s) => kelasTerlibat(status, s.kelas)) : [];
       const butiran = sesi.map((s) => {
         const st = siapUntuk(siap, tarikh, s.id, gid, MOD);
+        const td = !st.siap ? guruTiada(tiada, tarikh, gid, s) : null;
         return {
+          tiada: td ? (td.jenis || 'cuti') : null,
           label: `${jd.kelas[s.kelas]?.nama || s.kelas} · ${jd.subjek[s.subjek]?.ringkas || s.subjek}`,
           waktu: s.harian ? 'Harian' : labelWaktu(s.waktu).replace('Waktu ', 'W'),
           ok: st.siap, sendiri: st.sendiri,
           oleh: !st.sendiri && st.oleh.length ? st.oleh.map((g) => jd.guru[g]?.ringkas || '?').join(', ') : '',
         };
       });
-      const diisi = butiran.filter((x) => x.ok).length;
+      const dikira = butiran.filter((x) => !x.tiada);
+      const diisi = dikira.filter((x) => x.ok).length;
+      const rekTiada = tiada[tarikh]?.[gid] || null;
       const milik = bahan.filter((b) => b.olehGuruId === gid || (b.guruId === gid && !b.bagiPihak));
       const terakhir = milik.reduce((m, b) => (b.masa > m ? b.masa : m), '');
       const akaun = akaunGuru[gid] || [];
       const st = akaun.some((a) => a.status === 'lulus') ? 'lulus' : akaun.length ? 'menunggu' : jemputGuru[gid] ? 'didaftar' : 'tiada';
-      return { gid, g, jumlah: sesi.length, diisi, butiran, pc: sesi.length ? Math.round((diisi / sesi.length) * 100) : null,
+      return { gid, g, jumlah: dikira.length, nSesi: sesi.length, diisi, butiran, pc: dikira.length ? Math.round((diisi / dikira.length) * 100) : null, rekTiada,
         terakhir, bilBahan: milik.length, st, emel: akaun.map((a) => a.email).join(', ') || jemputGuru[gid]?.id || '' };
     });
 
     const adaSesi = baris.filter((b) => b.jumlah);
+    const bilTiada = baris.filter((b) => b.rekTiada).length;
     const lengkap = adaSesi.filter((b) => b.diisi === b.jumlah).length;
     const tiadaAkaun = baris.filter((b) => b.st === 'tiada' || b.st === 'didaftar').length;
     const tot = adaSesi.reduce((n, b) => n + b.jumlah, 0), totIsi = adaSesi.reduce((n, b) => n + b.diisi, 0);
@@ -133,6 +141,7 @@
       <div class="stat"><small>Guru bersesi hari ini</small><b>${adaSesi.length}</b></div>
       <div class="stat"><small>Lengkap hari ini</small><b>${lengkap}<span class="lembut" style="font-size:.9rem;font-weight:500"> / ${adaSesi.length}</span></b><div class="bar-maju"><i style="width:${adaSesi.length ? (lengkap / adaSesi.length) * 100 : 0}%"></i></div></div>
       <div class="stat"><small>Sesi diisi</small><b>${totIsi}/${tot}</b><div class="lembut kecil">${tot ? Math.round((totIsi / tot) * 100) : 0}% pematuhan</div></div>
+      <div class="stat"><small>Cuti / Rasmi hari ini</small><b>${bilTiada}</b><small><a href="../guru/cuti.html?t=${tarikh}">Rekod cuti / rasmi →</a></small></div>
       <div class="stat"><small>Belum log masuk</small><b>${tiadaAkaun}</b></div>`;
     lukis();
   }
@@ -148,7 +157,7 @@
     const q = $('cari').value.trim().toLowerCase();
     const xs = baris
       .filter((b) => !q || b.g.nama.toLowerCase().includes(q) || (b.g.ringkas || '').toLowerCase() === q || (b.g.ringkas || '').toLowerCase().startsWith(q))
-      .filter((b) => penapis === 'semua' || (penapis === 'belum' ? b.jumlah && b.diisi < b.jumlah : b.st === 'tiada' || b.st === 'didaftar'))
+      .filter((b) => penapis === 'semua' || (penapis === 'belum' ? b.jumlah && b.diisi < b.jumlah : penapis === 'cuti' ? !!b.rekTiada : b.st === 'tiada' || b.st === 'didaftar'))
       .sort((a, b) => (a.pc ?? 101) - (b.pc ?? 101) || a.g.nama.localeCompare(b.g.nama, 'ms'));
 
     document.querySelectorAll('#penapis button').forEach((x) => x.setAttribute('aria-selected', x.dataset.p === penapis));
@@ -159,11 +168,13 @@
       <tbody>${xs.map((b) => {
         const warna = b.pc === null ? 'var(--garis)' : b.pc === 100 ? 'var(--utama-2)' : b.pc >= 50 ? 'var(--aksen)' : 'var(--bahaya)';
         return `<tr class="baris-guru" data-g="${esc(b.gid)}">
-          <td><b>${esc(namaCantik(b.g.nama))}</b><div class="kecil lembut">${esc(b.g.ringkas || '')}${b.emel ? ' · ' + esc(b.emel) : ''}</div></td>
+          <td><b>${esc(namaCantik(b.g.nama))}</b>${b.rekTiada ? ` <span class="lencana ${b.rekTiada.jenis || 'cuti'}">${b.rekTiada.jenis === 'rasmi' ? '🏛️' : '🏠'} ${JENIS_TIADA[b.rekTiada.jenis] || 'Tiada'}${b.rekTiada.waktu?.length ? ` W${b.rekTiada.waktu[0]}–${b.rekTiada.waktu.at(-1)}` : ''}</span>` : ''}<div class="kecil lembut">${esc(b.g.ringkas || '')}${b.emel ? ' · ' + esc(b.emel) : ''}</div></td>
           <td data-label="Akaun">${LABEL_ST[b.st]}</td>
-          <td data-label="Diisi">${b.jumlah
-            ? `<div class="peratus"><b>${b.diisi}/${b.jumlah}</b><div class="bar-maju"><i style="width:${b.pc}%;background:${warna}"></i></div></div>
-               <div class="cip-sesi">${b.butiran.map((x) => `<span class="sesi-cip ${x.ok ? (x.sendiri ? 'ok' : 'rakan') : 'belum'}" title="${esc(x.waktu)}${x.oleh ? ' · upload oleh ' + esc(x.oleh) : ''}">${x.ok ? '✓' : '○'} ${esc(x.label)} <small>${esc(x.waktu)}${x.oleh ? (x.ok ? ' · oleh ' : ' · sudah oleh ') + esc(x.oleh) : ''}</small></span>`).join('')}</div>`
+          <td data-label="Diisi">${b.nSesi
+            ? `${b.jumlah ? `<div class="peratus"><b>${b.diisi}/${b.jumlah}</b><div class="bar-maju"><i style="width:${b.pc}%;background:${warna}"></i></div></div>` : `<span class="kecil lembut">Semua sesi dikecualikan</span>`}
+               <div class="cip-sesi">${b.butiran.map((x) => x.tiada
+                 ? `<span class="sesi-cip ${x.tiada}" title="${esc(x.waktu)} · ${JENIS_TIADA[x.tiada]} (tidak dikira)">${x.tiada === 'rasmi' ? '🏛️' : '🏠'} ${esc(x.label)} <small>${esc(x.waktu)} · ${JENIS_TIADA[x.tiada]}</small></span>`
+                 : `<span class="sesi-cip ${x.ok ? (x.sendiri ? 'ok' : 'rakan') : 'belum'}" title="${esc(x.waktu)}${x.oleh ? ' · upload oleh ' + esc(x.oleh) : ''}">${x.ok ? '✓' : '○'} ${esc(x.label)} <small>${esc(x.waktu)}${x.oleh ? (x.ok ? ' · oleh ' : ' · sudah oleh ') + esc(x.oleh) : ''}</small></span>`).join('')}</div>`
             : '<span class="lembut kecil">Tiada sesi PDPR</span>'}</td>
           <td data-label="Terakhir" class="kecil">${b.terakhir ? esc(jamMasa(b.terakhir)) + ` <span class="lembut">· ${b.bilBahan} bahan</span>` : '<span class="lembut">—</span>'}</td>
           <td style="text-align:right"><a class="btn kedua kecil" href="../guru/index.html?lihat=${encodeURIComponent(b.gid)}&m=${tarikh}">${ikon('mata', 16)} Lihat</a></td>

@@ -64,7 +64,7 @@
 <script type="module">
   import { kawal } from '../assets/js/auth.js';
   import { pasangApp, esc, ikon, namaCantik, hariIni, tambahHari, isninMinggu, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
-  import { muatJadualUntuk, kalendarPdpr, kelasTerlibat, bahanJulat, hantaranJulat, petaSiap, petaSiapGuru, siapUntuk, modKongsi, muatTetapan } from '../assets/js/data.js';
+  import { muatJadualUntuk, kalendarPdpr, kelasTerlibat, bahanJulat, hantaranJulat, petaSiap, petaSiapGuru, siapUntuk, modKongsi, muatTetapan, tiadaJulat, infoTiadaJulat, petaTiada, guruTiada, sesiTiadaGuru } from '../assets/js/data.js';
   import { sesiHari, indeksHari, gabungKamus } from '../assets/js/jadual.js';
 
   const sesiAuth = await kawal('admin');
@@ -104,14 +104,16 @@
     $('hasil').innerHTML = `<p class="memuat"><i class="pusing"></i> Menjana laporan…</p>`;
 
     try {
-      const [status, bahan, hantaran, jMap, tetapan] = await Promise.all([
+      const [status, bahan, hantaran, jMap, tetapan, tAwam, tInfo] = await Promise.all([
         kalendarPdpr(dari, hingga, semua), bahanJulat(dari, hingga), hantaranJulat(dari, hingga).catch(() => []),
-        muatJadualUntuk(semua), tetapanP,
+        muatJadualUntuk(semua), tetapanP, tiadaJulat(dari, hingga), infoTiadaJulat(dari, hingga),
       ]);
       const K = gabungKamus(Object.values(jMap));
       const hariPdpr = semua.filter((t) => status[t].aktif);
       const siap = petaSiap(bahan);
       const siapG = petaSiapGuru(bahan), MOD = modKongsi(tetapan);
+      const tiada = petaTiada(tAwam, tInfo);
+      const jenisDari = (r) => (r?.jenis === 'rasmi' ? 'rasmi' : 'cuti');
       const hantarSesi = {};
       hantaran.forEach((h) => ((hantarSesi[h.tarikh + '|' + h.sesi] ??= []).push(h)));
 
@@ -121,18 +123,25 @@
         for (const s of sesiHari(jMap[t], indeksHari(t))) {
           if (!kelasTerlibat(status[t], s.kelas)) continue;
           const hs = hantarSesi[t + '|' + s.id] || [];
-          rekod.push({ t, s, ada: !!siap[t]?.has(s.id), nHantar: hs.length, murid: new Set(hs.map((h) => (h.namaMurid || '').trim().toUpperCase())) });
+          const ada = !!siap[t]?.has(s.id);
+          const tiadaS = !ada && sesiTiadaGuru(tiada, t, s) ? jenisDari(guruTiada(tiada, t, s.guru[0], s)) : null;
+          rekod.push({ t, s, ada, tiada: tiadaS, nHantar: hs.length, murid: new Set(hs.map((h) => (h.namaMurid || '').trim().toUpperCase())) });
         }
       }
 
       const baris = {};
       const tambah = (k, r) => {
-        const b = (baris[k] ??= { sesi: 0, diisi: 0, hantar: 0, murid: new Set(), hari: new Set() });
-        b.sesi++; if (r.ada) b.diisi++; b.hantar += r.nHantar; b.hari.add(r.t);
+        const b = (baris[k] ??= { sesi: 0, diisi: 0, cuti: 0, rasmi: 0, hantar: 0, murid: new Set(), hari: new Set() });
+        if (r.tiada) b[r.tiada]++; else { b.sesi++; if (r.ada) b.diisi++; }
+        b.hantar += r.nHantar; b.hari.add(r.t);
         r.murid.forEach((m) => b.murid.add(r.s.kelas + '|' + m));
       };
       for (const r of rekod) {
-        if (v === 'guru') r.s.guru.forEach((g) => tambah(g, { ...r, ada: siapUntuk(siapG, r.t, r.s.id, g, MOD).siap }));
+        if (v === 'guru') r.s.guru.forEach((g) => {
+          const ada = siapUntuk(siapG, r.t, r.s.id, g, MOD).siap;
+          const td = !ada ? guruTiada(tiada, r.t, g, r.s) : null;
+          tambah(g, { ...r, ada, tiada: td ? jenisDari(td) : null });
+        });
         else if (v === 'kelas') tambah(r.s.kelas, r);
         else tambah(r.t, r);
       }
@@ -146,10 +155,12 @@
 
       const label = (k) => v === 'guru' ? namaCantik(K.guru[k]?.nama || k) : v === 'kelas' ? (K.kelas[k]?.nama || k) : formatTarikh(k, 'pendek');
       const kod = (k) => v === 'guru' ? (K.guru[k]?.ringkas || '') : '';
-      const xs = Object.entries(baris).map(([k, b]) => ({ k, nama: label(k), kod: kod(k), ...b, pc: b.sesi ? Math.round((b.diisi / b.sesi) * 100) : 0, bahan: bilBahan[k] || 0, nMurid: b.murid.size }))
-        .sort((a, b) => v === 'tarikh' ? a.k.localeCompare(b.k) : v === 'kelas' ? a.nama.localeCompare(b.nama, 'ms', { numeric: true }) : a.pc - b.pc || a.nama.localeCompare(b.nama, 'ms'));
+      const xs = Object.entries(baris).map(([k, b]) => ({ k, nama: label(k), kod: kod(k), ...b, pc: b.sesi ? Math.round((b.diisi / b.sesi) * 100) : null, bahan: bilBahan[k] || 0, nMurid: b.murid.size }))
+        .sort((a, b) => v === 'tarikh' ? a.k.localeCompare(b.k) : v === 'kelas' ? a.nama.localeCompare(b.nama, 'ms', { numeric: true }) : (a.pc ?? 101) - (b.pc ?? 101) || a.nama.localeCompare(b.nama, 'ms'));
 
-      const tot = { sesi: rekod.length, diisi: rekod.filter((r) => r.ada).length, hantar: rekod.reduce((n, r) => n + r.nHantar, 0),
+      const dikira = rekod.filter((r) => !r.tiada);
+      const tot = { sesi: dikira.length, diisi: dikira.filter((r) => r.ada).length, cuti: rekod.filter((r) => r.tiada === 'cuti').length, rasmi: rekod.filter((r) => r.tiada === 'rasmi').length,
+        hantar: rekod.reduce((n, r) => n + r.nHantar, 0),
         bahan: bahan.filter((b) => status[b.tarikh]?.aktif).length };
       tot.pc = tot.sesi ? Math.round((tot.diisi / tot.sesi) * 100) : 0;
       laporan = { dari, hingga, v, xs, tot, hariPdpr, tetapan };
@@ -187,23 +198,24 @@
         <div class="stat"><small>Sesi PDPR</small><b>${tot.sesi}</b></div>
         <div class="stat"><small>Sesi diisi</small><b>${tot.diisi}</b></div>
         <div class="stat"><small>Pematuhan</small><b>${tot.pc}%</b></div>
+        <div class="stat"><small>Dikecualikan</small><b>${tot.cuti + tot.rasmi}</b><small>Cuti ${tot.cuti} · Rasmi ${tot.rasmi}</small></div>
         <div class="stat"><small>Bahan dimuat naik</small><b>${tot.bahan}</b></div>
         <div class="stat"><small>Hantaran kerja murid</small><b>${tot.hantar}</b></div>
       </div>
 
       <div class="balut-jadual">
         <table class="jadual-data jadual-laporan">
-          <thead><tr><th>Bil</th><th>${TAJUK[v]}</th>${v === 'guru' ? '<th>Kod</th>' : ''}<th>Hari</th><th>Sesi</th><th>Diisi</th><th>%</th><th>Bahan</th><th>Hantaran murid</th>${v !== 'guru' ? '<th>Murid unik</th>' : ''}</tr></thead>
+          <thead><tr><th>Bil</th><th>${TAJUK[v]}</th>${v === 'guru' ? '<th>Kod</th>' : ''}<th>Hari</th><th>Sesi</th><th>Diisi</th><th>Cuti</th><th>Rasmi</th><th>%</th><th>Bahan</th><th>Hantaran murid</th>${v !== 'guru' ? '<th>Murid unik</th>' : ''}</tr></thead>
           <tbody>${xs.map((x, i) => `<tr>
             <td>${i + 1}</td><td><b>${esc(x.nama)}</b></td>${v === 'guru' ? `<td>${esc(x.kod)}</td>` : ''}
-            <td>${x.hari.size}</td><td>${x.sesi}</td><td>${x.diisi}</td>
-            <td><span class="lencana ${x.pc === 100 ? '' : x.pc >= 50 ? 'amaran' : 'bahaya'}">${x.pc}%</span></td>
+            <td>${x.hari.size}</td><td>${x.sesi}</td><td>${x.diisi}</td><td>${x.cuti || '–'}</td><td>${x.rasmi || '–'}</td>
+            <td>${x.pc === null ? '<span class="lencana tiada">–</span>' : `<span class="lencana ${x.pc === 100 ? '' : x.pc >= 50 ? 'amaran' : 'bahaya'}">${x.pc}%</span>`}</td>
             <td>${x.bahan}</td><td>${x.hantar}</td>${v !== 'guru' ? `<td>${x.nMurid}</td>` : ''}
           </tr>`).join('')}</tbody>
-          <tfoot><tr><td></td><td><b>Jumlah</b></td>${v === 'guru' ? '<td></td>' : ''}<td>${hariPdpr.length}</td><td><b>${tot.sesi}</b></td><td><b>${tot.diisi}</b></td><td><b>${tot.pc}%</b></td><td><b>${tot.bahan}</b></td><td><b>${tot.hantar}</b></td>${v !== 'guru' ? '<td></td>' : ''}</tr></tfoot>
+          <tfoot><tr><td></td><td><b>Jumlah</b></td>${v === 'guru' ? '<td></td>' : ''}<td>${hariPdpr.length}</td><td><b>${tot.sesi}</b></td><td><b>${tot.diisi}</b></td><td><b>${tot.cuti}</b></td><td><b>${tot.rasmi}</b></td><td><b>${tot.pc}%</b></td><td><b>${tot.bahan}</b></td><td><b>${tot.hantar}</b></td>${v !== 'guru' ? '<td></td>' : ''}</tr></tfoot>
         </table>
       </div>
-      ${v === 'guru' ? '<p class="bantuan">Sesi dikongsi (cth Tasmik, PI/PM) dikira untuk setiap guru dalam sesi tersebut.</p>' : ''}
+      <p class="bantuan">Sesi = sesi yang dikira untuk pematuhan. Sesi semasa guru <b>Cuti</b> atau urusan <b>Rasmi</b> yang tiada bahan tidak dikira (ditunjukkan dalam lajur Cuti / Rasmi).${v === 'guru' ? ' Sesi dikongsi (cth Tasmik, PI/PM) dikira untuk setiap guru dalam sesi tersebut.' : ''}</p>
 
       <div class="tandatangan cetak-sahaja">
         <div><span>Disediakan oleh:</span><i></i><small>Nama:</small><small>Jawatan:</small><small>Tarikh:</small></div>
@@ -230,12 +242,12 @@
     try {
       await muatSkrip('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
       const { dari, hingga, v, xs, tot, hariPdpr, tetapan } = laporan;
-      const kepala = ['Bil', TAJUK[v], ...(v === 'guru' ? ['Kod'] : []), 'Hari PDPR', 'Sesi', 'Diisi', 'Pematuhan (%)', 'Bahan', 'Hantaran murid', ...(v !== 'guru' ? ['Murid unik'] : [])];
-      const data = xs.map((x, i) => [i + 1, x.nama, ...(v === 'guru' ? [x.kod] : []), x.hari.size, x.sesi, x.diisi, x.pc, x.bahan, x.hantar, ...(v !== 'guru' ? [x.nMurid] : [])]);
+      const kepala = ['Bil', TAJUK[v], ...(v === 'guru' ? ['Kod'] : []), 'Hari PDPR', 'Sesi', 'Diisi', 'Cuti', 'Rasmi', 'Pematuhan (%)', 'Bahan', 'Hantaran murid', ...(v !== 'guru' ? ['Murid unik'] : [])];
+      const data = xs.map((x, i) => [i + 1, x.nama, ...(v === 'guru' ? [x.kod] : []), x.hari.size, x.sesi, x.diisi, x.cuti, x.rasmi, x.pc ?? '', x.bahan, x.hantar, ...(v !== 'guru' ? [x.nMurid] : [])]);
       const aoa = [
         [tetapan.nama], [`Laporan Pelaksanaan PDPR — Ikut ${TAJUK[v]}`], [`${dari} hingga ${hingga} (${hariPdpr.length} hari PDPR)`], [],
         kepala, ...data,
-        ['', 'Jumlah', ...(v === 'guru' ? [''] : []), hariPdpr.length, tot.sesi, tot.diisi, tot.pc, tot.bahan, tot.hantar],
+        ['', 'Jumlah', ...(v === 'guru' ? [''] : []), hariPdpr.length, tot.sesi, tot.diisi, tot.cuti, tot.rasmi, tot.pc, tot.bahan, tot.hantar],
         [], ['Disediakan oleh:', '', '', 'Disahkan oleh:'], [], ['Nama:', '', '', 'Nama:'], ['Jawatan:', '', '', 'Jawatan:'], ['Tarikh:', '', '', 'Tarikh:'],
       ];
       const ws = window.XLSX.utils.aoa_to_sheet(aoa);

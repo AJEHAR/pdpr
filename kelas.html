@@ -40,7 +40,7 @@
 
 <script type="module">
   import { pasangRangka, hariIni, hariBekerja, tambahHari, formatTarikh, esc, namaCantik } from './assets/js/ui.js';
-  import { muatJadual, statusPdpr, kelasTerlibat, bahanKelas, muatTetapan } from './assets/js/data.js';
+  import { muatJadual, statusPdpr, kelasTerlibat, bahanKelas, muatTetapan, tiadaJulat, petaTiada, sesiTiadaGuru } from './assets/js/data.js';
   import { bukaBorangKerja, hantaranPeranti } from './assets/js/hantar-kerja.js';
   import { indeksHari, sesiHari, labelWaktu } from './assets/js/jadual.js';
   import { bukaPilihKelas, catatKelas, ikonCari } from './assets/js/cari-kelas.js';
@@ -105,12 +105,15 @@
 
     const saya = ++giliran;
     elHasil.innerHTML = `<p class="memuat">Memuatkan…</p>`;
-    const [status, bahan, jd] = await Promise.all([statusPdpr(tarikh), bahanKelas(tarikh, kelasId), muatJadual(tarikh)]);
+    const [status, bahan, jd, tAwam] = await Promise.all([statusPdpr(tarikh), bahanKelas(tarikh, kelasId), muatJadual(tarikh), tiadaJulat(tarikh, tarikh)]);
     if (saya !== giliran) return;
 
-    const sesi = sesiHari(jd, h, { kelasId }); // jadual yang berkuat kuasa pada tarikh itu
     const terlibat = kelasTerlibat(status, kelasId);
     const bahanSesi = (id) => bahan.filter((b) => (b.sesi || []).includes(id));
+    // Slot guru yang cuti / urusan rasmi (tanpa bahan) tidak dipaparkan kepada ibu bapa
+    const tiada = petaTiada(tAwam);
+    const sesi = sesiHari(jd, h, { kelasId }) // jadual yang berkuat kuasa pada tarikh itu
+      .filter((s) => !(terlibat && !bahanSesi(s.id).length && sesiTiadaGuru(tiada, tarikh, s)));
     const bahanHarian = bahan.filter((b) => !b.sesi || !b.sesi.length || b.sesi.includes('harian'));
     const ada = sesi.filter((s) => bahanSesi(s.id).length).length;
 

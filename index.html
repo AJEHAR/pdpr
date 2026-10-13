@@ -48,7 +48,7 @@
 
 <script type="module">
   import { pasangRangka, pasangButangPasang, hariIni, hariBekerja, tambahHari, formatTarikh, esc } from './assets/js/ui.js';
-  import { muatJadual, statusPdpr, kelasTerlibat, bahanTarikh } from './assets/js/data.js';
+  import { muatJadual, statusPdpr, kelasTerlibat, bahanTarikh, tiadaJulat, petaTiada, sesiTiadaGuru } from './assets/js/data.js';
   import { indeksHari, sesiHari } from './assets/js/jadual.js';
   import { padanKelas, susunKelas, kelasTerakhir, ikonCari } from './assets/js/cari-kelas.js';
 
@@ -105,7 +105,9 @@
 
     try {
       const h = indeksHari(t);
-      const [jadual, status, bahan] = await Promise.all([muatJadual(t), statusPdpr(t), h >= 0 ? bahanTarikh(t) : []]);
+      const [jadual, status, bahan, tAwam] = await Promise.all([muatJadual(t), statusPdpr(t), h >= 0 ? bahanTarikh(t) : [], h >= 0 ? tiadaJulat(t, t) : []]);
+      const tiada = petaTiada(tAwam);
+      const adaBahanSesi = new Set(bahan.flatMap((b) => b.sesi || []));
       if (saya !== giliran) return;
 
       elStatus.innerHTML = `
@@ -140,8 +142,9 @@
       elSenarai.innerHTML = kumpulan.map(([tajuk, senarai]) => `<div data-kump>
         <div class="seksyen-tajuk"><h2>${tajuk}</h2><span class="lembut">${senarai.length} kelas</span></div>
         <div class="grid-kelas">${senarai.map(([id, k]) => {
-          const nSesi = h >= 0 ? sesiHari(jadual, h, { kelasId: id }).length : 0;
           const terlibat = kelasTerlibat(status, id);
+          const nSesi = h >= 0 ? sesiHari(jadual, h, { kelasId: id })
+            .filter((s) => !(terlibat && !adaBahanSesi.has(s.id) && sesiTiadaGuru(tiada, t, s))).length : 0;
           const n = kiraBahan[id] || 0;
           const ket = h < 0 ? 'hujung minggu' : `${nSesi} sesi · ${terlibat ? `${n} bahan` : 'tiada PDPR'}`;
           return `<a class="kelas-kad ${terlibat && n ? 'ada-bahan' : ''}" data-id="${id}" href="kelas.html?k=${k.slug}&t=${t}">

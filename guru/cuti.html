@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cuti &amp; Rasmi · Portal PDPR</title>
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#0f5c4d">
+  <link rel="icon" type="image/png" href="../assets/img/favicon.png">
+  <link rel="apple-touch-icon" href="../assets/img/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="PDPR CBA4082">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="../assets/css/style.css">
+  <script>
+    // Papar ralat jika skrip halaman gagal (cth fail lama dalam cache), bukannya tersekat pada "Memuatkan…"
+    (function () {
+      var dah = false;
+      function papar(msg) {
+        if (dah) return; dah = true;
+        var m = document.querySelector('main');
+        if (!m || document.querySelector('.app-sisi, .sisi, nav.sidebar')) return;
+        m.insertAdjacentHTML('afterbegin', '<div class="notis bahaya" style="margin-top:12px"><b>Halaman gagal dimuatkan.</b> Tekan <b>Ctrl + Shift + R</b> (atau tutup &amp; buka semula aplikasi). <button class="btn kecil" style="margin-left:8px" onclick="location.reload(true)">Muat semula</button><div class="kecil" style="margin-top:6px;opacity:.75">' + String(msg).replace(/[<>&]/g, '') + '</div></div>');
+      }
+      addEventListener('error', function (e) { if (e.message) papar(e.message); });
+      addEventListener('unhandledrejection', function (e) { papar((e.reason && (e.reason.code || e.reason.message)) || e.reason); });
+    })();
+  </script>
+</head>
+<body>
+<main>
+  <div class="kepala">
+    <div>
+      <h1>Cuti &amp; Rasmi</h1>
+      <p class="lembut" id="subtajuk">Rekod hari guru tidak hadir. Slot tidak dikira "belum diisi" dan disembunyikan daripada ibu bapa jika tiada bahan.</p>
+    </div>
+  </div>
+  <div id="halaman"><p class="memuat">Memuatkan…</p></div>
+</main>
+
+<script type="module">
+  import { kawal, adalahAdmin } from '../assets/js/auth.js';
+  import { pasangApp, esc, ikon, namaCantik, hariIni, tambahHari, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
+  import { muatJadual, infoTiadaJulat, simpanTiada, padamTiada, JENIS_TIADA } from '../assets/js/data.js';
+  import { indeksHari } from '../assets/js/jadual.js';
+
+  const sesiAuth = await kawal('guru');
+  await pasangApp('guru/cuti.html', sesiAuth);
+  const { u, profil } = sesiAuth;
+  const ADMIN = adalahAdmin(profil);
+  const $ = (id) => document.getElementById(id);
+  const kini = hariIni();
+  const jadual = await muatJadual();
+  const namaGuru = (g) => namaCantik(jadual.guru[g]?.nama || g);
+  const senaraiGuru = Object.entries(jadual.guru).sort((a, b) => a[1].nama.localeCompare(b[1].nama, 'ms'));
+  const p = new URLSearchParams(location.search);
+
+  if (ADMIN) $('subtajuk').textContent = 'Rekod cuti atau urusan rasmi guru. Slot tidak dikira "belum diisi" dan disembunyikan daripada ibu bapa jika tiada bahan.';
+
+  const keadaan = {
+    guruId: (ADMIN && p.get('g')) || profil.guruId || '',
+    jenis: 'cuti',
+    dari: p.get('t') || kini,
+    hingga: p.get('t') || kini,
+    penuh: true,
+    wDari: jadual.waktu[0]?.no,
+    wHingga: jadual.waktu.at(-1)?.no,
+  };
+  const pilihanWaktu = (pilih) => jadual.waktu.map((w) => `<option value="${w.no}" ${w.no === pilih ? 'selected' : ''}>Waktu ${w.no} · ${w.mula}</option>`).join('');
+
+  $('halaman').innerHTML = `
+    ${profil.status !== 'lulus' ? `<div class="notis amaran">Akaun anda belum diluluskan admin. Rekod hanya boleh disimpan selepas kelulusan.</div>` : ''}
+    <div class="upload-grid">
+      <section class="kad">
+        <div class="langkah"><span class="no">+</span><h2>Rekod baharu</h2></div>
+        <div class="medan" ${ADMIN ? '' : 'hidden'}>
+          <label for="guru">Guru</label>
+          <select id="guru"><option value="">— Pilih guru —</option>${senaraiGuru.map(([id, g]) => `<option value="${id}" ${id === keadaan.guruId ? 'selected' : ''}>${esc(namaCantik(g.nama))}</option>`).join('')}</select>
+        </div>
+        ${!ADMIN && profil.guruId ? `<p class="kecil" style="margin:0 0 12px">Guru: <b>${esc(namaGuru(profil.guruId))}</b></p>` : ''}
+        <div class="medan">
+          <label>Jenis</label>
+          <div class="tab-segmen" role="tablist" id="jenis">
+            <button type="button" data-j="cuti" aria-selected="true">🏠 Cuti</button>
+            <button type="button" data-j="rasmi" aria-selected="false">🏛️ Rasmi</button>
+          </div>
+          <p class="bantuan" id="bantu-jenis"></p>
+        </div>
+        <div class="baris-medan">
+          <div class="medan"><label for="dari">Dari</label><input type="date" id="dari" value="${keadaan.dari}"></div>
+          <div class="medan"><label for="hingga">Hingga</label><input type="date" id="hingga" value="${keadaan.hingga}"></div>
+        </div>
+        <div class="medan">
+          <label>Tempoh</label>
+          <label class="pilihan-radio" style="margin-top:0"><input type="radio" name="tempoh" value="penuh" checked> <span><b>Sepanjang hari</b></span></label>
+          <label class="pilihan-radio"><input type="radio" name="tempoh" value="waktu"> <span><b>Waktu tertentu sahaja</b><br><small class="lembut">Cth bengkel bermula jam 10 pagi, atau MC selepas rehat</small></span></label>
+        </div>
+        <div class="baris-medan" id="medan-waktu" hidden>
+          <div class="medan"><label for="w-dari">Dari waktu</label><select id="w-dari">${pilihanWaktu(keadaan.wDari)}</select></div>
+          <div class="medan"><label for="w-hingga">Hingga waktu</label><select id="w-hingga">${pilihanWaktu(keadaan.wHingga)}</select></div>
+        </div>
+        <div class="medan">
+          <label for="catatan">Catatan (pilihan)</label>
+          <input type="text" id="catatan" maxlength="300" placeholder="cth Bengkel PAK21 di PPD">
+          <p class="bantuan">Jenis dan catatan hanya dilihat oleh admin dan guru itu sendiri. Ibu bapa tidak nampak apa-apa.</p>
+        </div>
+        <div id="ringkasan" class="notis info" style="margin:6px 0 12px"></div>
+        <button class="btn penuh" id="simpan">${ikon('tanda', 18)} <span>Simpan</span></button>
+      </section>
+
+      <section class="kad">
+        <div class="seksyen-tajuk" style="margin-bottom:10px">
+          <h2 style="margin:0">${ADMIN ? 'Rekod guru' : 'Rekod saya'}</h2>
+          <span class="lencana tiada" id="bil"></span>
+        </div>
+        ${ADMIN ? `<input type="search" id="cari" placeholder="Cari nama guru…" style="margin-bottom:10px">` : ''}
+        <div id="senarai"><p class="lembut kecil">Memuatkan…</p></div>
+        <p class="bantuan">Dipaparkan: 30 hari lepas hingga 6 bulan akan datang.</p>
+      </section>
+    </div>`;
+
+  const BANTU = {
+    cuti: 'Cuti sakit (MC), cuti rehat, cuti kecemasan, cuti bersalin dan sebagainya.',
+    rasmi: 'Kursus, bengkel, program rasmi, mesyuarat luar atau tugas rasmi lain.',
+  };
+
+  function tarikhJulat() {
+    const xs = [];
+    if (!keadaan.dari || !keadaan.hingga || keadaan.hingga < keadaan.dari) return xs;
+    for (let t = keadaan.dari; t <= keadaan.hingga && xs.length < 200; t = tambahHari(t, 1)) if (indeksHari(t) >= 0) xs.push(t);
+    return xs;
+  }
+  function waktuDipilih() {
+    if (keadaan.penuh) return null;
+    const a = Math.min(keadaan.wDari, keadaan.wHingga), b = Math.max(keadaan.wDari, keadaan.wHingga);
+    return jadual.waktu.map((w) => w.no).filter((n) => n >= a && n <= b);
+  }
+  function ringkas() {
+    document.querySelectorAll('#jenis button').forEach((b) => b.setAttribute('aria-selected', b.dataset.j === keadaan.jenis));
+    $('bantu-jenis').textContent = BANTU[keadaan.jenis];
+    $('medan-waktu').hidden = keadaan.penuh;
+    const xs = tarikhJulat();
+    const w = waktuDipilih();
+    const ganti = xs.filter((t) => rekod.some((r) => r.guruId === keadaan.guruId && r.tarikh === t)).length;
+    $('ringkasan').innerHTML = !keadaan.guruId ? 'Pilih guru dahulu.'
+      : !xs.length ? 'Pilih julat tarikh yang sah (hari bekerja sahaja dikira).'
+      : `<b>${JENIS_TIADA[keadaan.jenis]}</b> · ${xs.length} hari bekerja (${esc(formatTarikh(xs[0], 'pendek'))}${xs.length > 1 ? ' – ' + esc(formatTarikh(xs.at(-1), 'pendek')) : ''}) · ${w ? `Waktu ${w[0]}–${w.at(-1)}` : 'sepanjang hari'}
+         ${ganti ? `<br><small>${ganti} hari sudah ada rekod dan akan diganti.</small>` : ''}`;
+    $('simpan').disabled = !keadaan.guruId || !xs.length || profil.status !== 'lulus';
+  }
+
+  // ---------- Senarai rekod ----------
+  let rekod = [];
+  const dariSenarai = tambahHari(kini, -30), hinggaSenarai = tambahHari(kini, 183);
+  async function muatRekod() {
+    rekod = await infoTiadaJulat(dariSenarai, hinggaSenarai, ADMIN ? null : profil.guruId);
+    lukisRekod(); ringkas();
+  }
+  function kumpul(xs) {
+    // Kumpul hari berturutan dengan jenis/waktu/catatan sama
+    const ikut = {};
+    for (const r of [...xs].sort((a, b) => a.guruId.localeCompare(b.guruId) || a.tarikh.localeCompare(b.tarikh))) {
+      const k = [r.guruId, r.kumpulan || r.tarikh, r.jenis, JSON.stringify(r.waktu), r.catatan || ''].join('|');
+      (ikut[k] ??= []).push(r);
+    }
+    return Object.values(ikut).sort((a, b) => b[0].tarikh.localeCompare(a[0].tarikh));
+  }
+  function lukisRekod() {
+    const q = ($('cari')?.value || '').trim().toLowerCase();
+    const xs = rekod.filter((r) => !q || namaGuru(r.guruId).toLowerCase().includes(q));
+    const kump = kumpul(xs);
+    $('bil').textContent = kump.length ? `${kump.length} rekod` : '';
+    if (!kump.length) { $('senarai').innerHTML = `<div class="kosong" style="padding:20px 0"><div class="ikon">🗓️</div><p>Tiada rekod.</p></div>`; return; }
+    $('senarai').innerHTML = kump.map((g, i) => {
+      const r = g[0], akhir = g.at(-1);
+      const lepas = akhir.tarikh < kini;
+      const julat = g.length > 1 ? `${formatTarikh(r.tarikh, 'pendek')} – ${formatTarikh(akhir.tarikh, 'pendek')} (${g.length} hari)` : formatTarikh(r.tarikh);
+      return `<div class="rekod-tiada ${lepas ? 'lepas' : ''}">
+        <span class="lencana ${r.jenis === 'rasmi' ? 'rasmi' : 'cuti'}">${r.jenis === 'rasmi' ? '🏛️' : '🏠'} ${JENIS_TIADA[r.jenis] || '?'}</span>
+        <div class="isi">
+          ${ADMIN ? `<b>${esc(namaGuru(r.guruId))}</b>` : ''}
+          <div${ADMIN ? ' class="kecil"' : ''}><b${ADMIN ? ' style="font-weight:600"' : ''}>${esc(julat)}</b></div>
+          <div class="kecil lembut">${r.waktu?.length ? `Waktu ${r.waktu[0]}–${r.waktu.at(-1)}` : 'Sepanjang hari'}${r.catatan ? ' · ' + esc(r.catatan) : ''}${ADMIN && r.olehNama ? ' · direkod oleh ' + esc(namaCantik(r.olehNama)) : ''}</div>
+        </div>
+        <button class="ik-btn" data-padam="${i}" title="Padam rekod" aria-label="Padam rekod">${ikon('sampah', 16)}</button>
+      </div>`;
+    }).join('');
+    $('senarai').onclick = async (e) => {
+      const b = e.target.closest('[data-padam]');
+      if (!b) return;
+      const g = kump[+b.dataset.padam];
+      if (!confirm(`Padam rekod ${JENIS_TIADA[g[0].jenis]} ${g.length > 1 ? g.length + ' hari' : formatTarikh(g[0].tarikh)}?`)) return;
+      b.disabled = true;
+      try { await padamTiada(g); toast('Rekod dipadam'); await muatRekod(); }
+      catch (err) { toast(mesejRalat(err), 'ralat'); b.disabled = false; }
+    };
+  }
+
+  // ---------- Peristiwa ----------
+  document.querySelectorAll('#jenis button').forEach((b) => (b.onclick = () => { keadaan.jenis = b.dataset.j; ringkas(); }));
+  $('guru').onchange = (e) => { keadaan.guruId = e.target.value; ringkas(); };
+  $('dari').onchange = (e) => { keadaan.dari = e.target.value; if (!keadaan.hingga || keadaan.hingga < keadaan.dari) { keadaan.hingga = keadaan.dari; $('hingga').value = keadaan.dari; } ringkas(); };
+  $('hingga').onchange = (e) => { keadaan.hingga = e.target.value; ringkas(); };
+  document.querySelectorAll('[name=tempoh]').forEach((r) => (r.onchange = () => { keadaan.penuh = r.value === 'penuh' && r.checked; ringkas(); }));
+  $('w-dari').onchange = (e) => { keadaan.wDari = +e.target.value; ringkas(); };
+  $('w-hingga').onchange = (e) => { keadaan.wHingga = +e.target.value; ringkas(); };
+  if ($('cari')) $('cari').oninput = lukisRekod;
+
+  $('simpan').onclick = async () => {
+    const btn = $('simpan');
+    const xs = tarikhJulat();
+    if (!xs.length || !keadaan.guruId) return;
+    btn.disabled = true;
+    btn.innerHTML = `<i class="pusing putih"></i><span>Menyimpan…</span>`;
+    try {
+      await simpanTiada({ guruId: keadaan.guruId, tarikh: xs, jenis: keadaan.jenis, waktu: waktuDipilih(), catatan: $('catatan').value.trim(),
+        uid: u.uid, olehNama: profil.guruId ? jadual.guru[profil.guruId]?.nama || profil.nama : profil.nama || u.email });
+      toast(`${JENIS_TIADA[keadaan.jenis]} direkod untuk ${xs.length} hari ✓`);
+      $('catatan').value = '';
+      await muatRekod();
+    } catch (err) { toast(mesejRalat(err), 'ralat'); }
+    btn.innerHTML = `${ikon('tanda', 18)} <span>Simpan</span>`;
+    ringkas();
+  };
+
+  ringkas();
+  muatRekod();
+</script>
+</body>
+</html>

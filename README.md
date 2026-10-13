@@ -27,6 +27,7 @@ dan untuk murid/ibu bapa melihat bahan mengikut kelas dan tarikh. Ada susun atur
 | `guru/upload.html` | Guru | Pilih sesi (boleh gabung), fail/gambar kamera/pautan, catatan, guru ganti |
 | `guru/kerja.html` | Guru | Kerja murid yang dihantar bagi setiap sesi (fail dibuka secara peribadi) |
 | `guru/rekod.html` | Guru | Semua upload saya, padam |
+| `guru/cuti.html` | Guru / Admin | Rekod **Cuti** atau urusan **Rasmi** (sepanjang hari / waktu tertentu). Admin boleh rekod untuk mana-mana guru |
 | `admin/index.html` | Admin | Pematuhan harian ikut guru/kelas, CSV |
 | `admin/kalendar.html` | Admin | Tanda hari PDPR (semua / kelas tertentu, julat tarikh) |
 | `admin/pantau.html` | Admin | Pantau Guru: senarai guru, % diisi minggu ini, upload terakhir → lihat jadual/bahan/kerja murid guru (lihat sahaja) |
@@ -141,6 +142,20 @@ data/jadual.json       jadual semasa (tukar dengan tools/tukar-jadual.mjs)
 Setiap kelas mendapat satu sesi **"Aktiviti Harian"** setiap hari PDPR, iaitu 1 upload sehari.
 Guru prasekolah yang tiada dalam aSc ditambah sebagai **guru tambahan**, dan boleh memilih nama sendiri semasa log masuk.
 Slot aSc kelas pra (cth Pendidikan Islam waktu 7) kekal seperti biasa.
+
+## Cuti & Rasmi
+
+Guru (untuk diri sendiri) atau admin (untuk mana-mana guru) merekod **Cuti** atau **Rasmi** di menu **Cuti & Rasmi**:
+julat tarikh, sepanjang hari atau waktu tertentu (cth W6–W11), dan catatan pilihan.
+
+- **Pemantauan adil**: slot guru yang tiada dan belum diisi ditanda 🏠 Cuti / 🏛️ Rasmi dan **tidak dikira** "belum diisi"
+  di Pantau Guru, Papan Pemuka, Laporan dan Jadual Saya. Laporan ada lajur Cuti dan Rasmi.
+- **Ibu bapa**: slot itu **disembunyikan** di halaman kelas (tiada label atau sebab). Jika bahan sudah dimuat naik
+  (diupload awal atau oleh guru ganti), slot dipaparkan seperti biasa.
+- Slot berkongsi 2 guru hanya disembunyikan jika **semua** guru slot itu tiada.
+- Jenis dan catatan hanya boleh dibaca oleh admin dan guru itu sendiri (koleksi `ketiadaanInfo`);
+  koleksi awam `ketiadaan` hanya menyimpan guru, tarikh dan waktu.
+- Rekod lewat (cth MC dihantar keesokan hari) dibenarkan; status pemantauan terus dikemas kini.
 
 ## Kerja murid
 

@@ -42,7 +42,7 @@
 <script type="module">
   import { kawal } from '../assets/js/auth.js';
   import { pasangApp, esc, ikon, namaCantik, hariIni, hariBekerja, formatTarikh, toast, mesejRalat } from '../assets/js/ui.js';
-  import { muatJadual, statusPdpr, kelasTerlibat, bahanJulat, tambahBahan, padamBahan, muatTetapan } from '../assets/js/data.js';
+  import { muatJadual, statusPdpr, kelasTerlibat, bahanJulat, tambahBahan, padamBahan, muatTetapan, tiadaJulat, infoTiadaJulat, petaTiada, guruTiada, JENIS_TIADA } from '../assets/js/data.js';
   import { sesiHari, indeksHari, labelWaktu } from '../assets/js/jadual.js';
   import { hantarFail, kecilkanGambar, buangFail } from '../assets/js/upload.js';
 
@@ -189,7 +189,9 @@
     if (h < 0) { $('info-hari').innerHTML = `<div class="notis amaran">${esc(formatTarikh(t))} ialah hujung minggu.</div>`; sesiHariIni = []; bahanHari = []; lukisBahan(); return kemaskini(); }
 
     $('info-hari').innerHTML = `<p class="lembut kecil">Memuatkan…</p>`;
-    const [st, bahan, jdT] = await Promise.all([statusPdpr(t), bahanJulat(t, t, keadaan.guruId), muatJadual(t)]);
+    const [st, bahan, jdT, tAwam, tInfo] = await Promise.all([statusPdpr(t), bahanJulat(t, t, keadaan.guruId), muatJadual(t),
+      tiadaJulat(t, t), infoTiadaJulat(t, t, keadaan.guruId)]);
+    const tiada = petaTiada(tAwam.filter((r) => r.guruId === keadaan.guruId), tInfo);
     jd = jdT;
     statusHari = st;
     bahanHari = bahan;
@@ -218,7 +220,7 @@
         <input type="checkbox" value="${s.id}" ${keadaan.dipilih.has(s.id) ? 'checked' : ''} ${pdpr ? '' : 'disabled'}>
         <span class="t"><b>${esc(jd.kelas[s.kelas]?.nama)} · ${esc(jd.subjek[s.subjek]?.nama)}</b>
           <small>${s.harian ? 'Aktiviti harian prasekolah' : `${s.mula}–${s.tamat} · ${labelWaktu(s.waktu)}`}${s.kumpulan.length ? ' · ' + esc(s.kumpulan.join(' & ')) : ''}</small></span>
-        ${!pdpr ? '<span class="lencana tiada">Bukan PDPR</span>' : x.saya ? `<span class="lencana">✓ ${x.saya}</span>` : lain ? `<span class="lencana rakan" title="Slot berkongsi: guru lain sudah upload">✓ oleh ${esc(lain)}</span>` : '<span class="lencana amaran">Belum</span>'}
+        ${!pdpr ? '<span class="lencana tiada">Bukan PDPR</span>' : !x.saya && !lain && guruTiada(tiada, t, keadaan.guruId, s) ? (() => { const j = guruTiada(tiada, t, keadaan.guruId, s).jenis || 'cuti'; return `<span class="lencana ${j}" title="Tidak dikira. Anda masih boleh upload.">${j === 'rasmi' ? '🏛️' : '🏠'} ${JENIS_TIADA[j]}</span>`; })() : x.saya ? `<span class="lencana">✓ ${x.saya}</span>` : lain ? `<span class="lencana rakan" title="Slot berkongsi: guru lain sudah upload">✓ oleh ${esc(lain)}</span>` : '<span class="lencana amaran">Belum</span>'}
       </label>`;
     }).join('') : `<div class="kosong"><p>Tiada kelas pada hari ini.</p></div>`;
     $('sesi').onchange = (e) => {

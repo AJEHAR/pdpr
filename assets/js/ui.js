@@ -48,6 +48,7 @@ const P = {
   tutup: '<path d="M6 6l12 12M18 6 6 18"/>',
   kiri: '<path d="M15 5l-7 7 7 7"/>',
   kanan: '<path d="M9 5l7 7-7 7"/>',
+  cuti: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M3 12.5h18"/>',
   sampah: '<path d="M4 7h16M10 11v6M14 11v6M5 7l1 13a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1l1-13M9 7V4h6v3"/>',
 };
 export const ikon = (n, saiz = 20) =>
@@ -114,10 +115,12 @@ export async function pasangApp(aktif, { u, profil }) {
         { href: 'guru/upload.html', label: 'Upload Bahan', pendek: 'Upload', ikon: 'upload' },
         { href: 'guru/kerja.html', label: 'Kerja Murid', pendek: 'Murid', ikon: 'murid' },
         { href: 'guru/rekod.html', label: 'Rekod Saya', pendek: 'Rekod', ikon: 'senarai' },
+        { href: 'guru/cuti.html', label: 'Cuti & Rasmi', pendek: 'Cuti', ikon: 'cuti' },
       ]
     : [
         { href: 'guru/kerja.html', label: 'Kerja Murid', pendek: 'Murid', ikon: 'murid' },
         { href: 'guru/upload.html', label: 'Upload (Guru Ganti)', pendek: 'Upload', ikon: 'upload' },
+        { href: 'guru/cuti.html', label: 'Cuti & Rasmi Guru', pendek: 'Cuti', ikon: 'cuti' },
       ];
   const admin = adalahAdmin(profil)
     ? [
@@ -168,8 +171,8 @@ export async function pasangApp(aktif, { u, profil }) {
   atas.innerHTML = `<a class="jenama" href="${akar}index.html" data-jenama></a><span class="avatar">${esc(huruf)}</span>`;
 
   // Tab bawah (mobile)
-  const utama = profil.guruId ? guru : [...admin.slice(0, 3)];
-  const lain = profil.guruId ? [...admin, ...awam] : [...admin.slice(3), ...guru, ...awam];
+  const utama = profil.guruId ? guru.slice(0, 4) : [...admin.slice(0, 3)];
+  const lain = profil.guruId ? [...guru.slice(4), ...admin, ...awam] : [...admin.slice(3), ...guru, ...awam];
   const tab = document.createElement('nav');
   tab.className = 'tab-bawah';
   tab.innerHTML =

@@ -48,7 +48,7 @@
 <script type="module">
   import { kawal } from '../assets/js/auth.js';
   import { pasangApp, esc, ikon, namaCantik, hariIni, hariBekerja, tambahHari, formatTarikh } from '../assets/js/ui.js';
-  import { muatJadual, statusPdpr, kelasTerlibat, bahanTarikh, petaSiap, petaSiapGuru, siapUntuk, modKongsi, muatTetapan, senarai, hantaranJulat } from '../assets/js/data.js';
+  import { muatJadual, statusPdpr, kelasTerlibat, bahanTarikh, petaSiap, petaSiapGuru, siapUntuk, modKongsi, muatTetapan, senarai, hantaranJulat, tiadaJulat, infoTiadaJulat, petaTiada, guruTiada, sesiTiadaGuru, JENIS_TIADA } from '../assets/js/data.js';
   import { sesiHari, indeksHari, labelWaktu } from '../assets/js/jadual.js';
 
   const sesiAuth = await kawal('admin');
@@ -77,7 +77,10 @@
     const h = indeksHari(t);
     if (h < 0) { $('statistik').innerHTML = ''; $('isi').innerHTML = `<div class="kosong"><div class="ikon">🌤️</div><p>Hujung minggu.</p></div>`; return; }
 
-    const [status, bahan, jd, hantaran, tetapan] = await Promise.all([statusPdpr(t), bahanTarikh(t), muatJadual(t), hantaranJulat(t, t).catch(() => []), muatTetapan()]);
+    const [status, bahan, jd, hantaran, tetapan, tAwam, tInfo] = await Promise.all([statusPdpr(t), bahanTarikh(t), muatJadual(t), hantaranJulat(t, t).catch(() => []), muatTetapan(),
+      tiadaJulat(t, t), infoTiadaJulat(t, t)]);
+    const tiada = petaTiada(tAwam, tInfo);
+    const jenisDari = (r) => (r?.jenis || 'cuti');
     const MOD = modKongsi(tetapan);
     jadual = jd;
     if (!status.aktif) {
@@ -87,39 +90,52 @@
     }
     const siap = petaSiap(bahan)[t] || new Set();
     const siapG = petaSiapGuru(bahan);
-    const sesi = sesiHari(jadual, h).filter((s) => kelasTerlibat(status, s.kelas)).map((s) => ({ ...s, ada: siap.has(s.id) }));
+    const semuaSesi = sesiHari(jadual, h).filter((s) => kelasTerlibat(status, s.kelas)).map((s) => {
+      const ada = siap.has(s.id);
+      // Dikecualikan jika belum diisi DAN semua guru sesi itu cuti/rasmi
+      const tiadaS = !ada && sesiTiadaGuru(tiada, t, s) ? jenisDari(guruTiada(tiada, t, s.guru[0], s)) : null;
+      return { ...s, ada, tiada: tiadaS };
+    });
+    const sesi = semuaSesi.filter((s) => !s.tiada);
+    const dikecualikan = semuaSesi.length - sesi.length;
     const diisi = sesi.filter((s) => s.ada).length;
     const pc = sesi.length ? Math.round((diisi / sesi.length) * 100) : 0;
+    const bilGuruTiada = Object.keys(tiada[t] || {}).length;
     const bagiPihak = bahan.filter((b) => b.bagiPihak).length;
 
     $('statistik').innerHTML = `
       <div class="stat"><small>Sesi PDPR</small><b>${sesi.length}</b></div>
       <div class="stat"><small>Sudah diisi</small><b>${diisi}</b><div class="bar-maju"><i style="width:${pc}%"></i></div></div>
       <div class="stat"><small>Belum diisi</small><b style="color:${sesi.length - diisi ? '#a8650c' : 'inherit'}">${sesi.length - diisi}</b></div>
-      <div class="stat"><small>Pematuhan</small><b>${pc}%</b></div>
+      <div class="stat"><small>Pematuhan</small><b>${pc}%</b>${dikecualikan ? `<small>${dikecualikan} sesi dikecualikan (cuti/rasmi)</small>` : ''}</div>
+      <div class="stat"><small>Guru cuti / rasmi</small><b>${bilGuruTiada}</b><small><a href="../guru/cuti.html?t=${t}">Rekod →</a></small></div>
       <div class="stat"><small>Bahan dimuat naik</small><b>${bahan.length}</b>${bagiPihak ? `<small>${bagiPihak} oleh guru ganti</small>` : ''}</div>
       <div class="stat"><small>Murid hantar kerja</small><b>${new Set(hantaran.map((x) => x.kelasId + '|' + (x.namaMurid || '').trim().toUpperCase())).size}</b><small><a href="../guru/kerja.html?t=${t}">Lihat kerja murid →</a></small></div>`;
 
     // Ikut guru (slot berkongsi ikut tetapan: satu upload cukup / setiap guru upload sendiri)
     const ikutGuru = {};
-    for (const s of sesi) for (const g of s.guru) (ikutGuru[g] ??= []).push({ ...s, ada: siapUntuk(siapG, t, s.id, g, MOD).siap });
+    for (const s of semuaSesi) for (const g of s.guru) {
+      const ada = siapUntuk(siapG, t, s.id, g, MOD).siap;
+      const td = !ada ? guruTiada(tiada, t, g, s) : null;
+      (ikutGuru[g] ??= []).push({ ...s, ada, tiada: td ? jenisDari(td) : null });
+    }
     // Ikut kelas
     const ikutKelas = {};
-    for (const s of sesi) (ikutKelas[s.kelas] ??= []).push(s);
+    for (const s of semuaSesi) (ikutKelas[s.kelas] ??= []).push(s);
 
-    laporan = { t, sesi, ikutGuru, ikutKelas };
+    laporan = { t, sesi: semuaSesi, ikutGuru, ikutKelas };
     lukis();
   }
 
   const barisSesi = (s, denganGuru) => `<div class="kecil" style="padding:2px 0">
-      ${s.ada ? '✅' : '⭕'} ${s.mula} · ${esc(jadual.kelas[s.kelas]?.nama)} · ${esc(jadual.subjek[s.subjek]?.ringkas)} (${labelWaktu(s.waktu)})
+      ${s.ada ? '✅' : s.tiada ? (s.tiada === 'rasmi' ? '🏛️' : '🏠') : '⭕'} ${s.mula} · ${esc(jadual.kelas[s.kelas]?.nama)} · ${esc(jadual.subjek[s.subjek]?.ringkas)} (${labelWaktu(s.waktu)})
       ${denganGuru ? ' · ' + esc(s.guru.map((g) => jadual.guru[g]?.ringkas).join(', ')) : ''}</div>`;
 
   function lukis() {
     const { sesi, ikutGuru, ikutKelas } = laporan;
     const sumber = paparan === 'guru' ? ikutGuru : ikutKelas;
     const nama = (id) => paparan === 'guru' ? namaCantik(jadual.guru[id]?.nama || id) : jadual.kelas[id]?.nama || id;
-    const baris = Object.entries(sumber).map(([id, s]) => ({ id, s, n: s.length, ada: s.filter((x) => x.ada).length }))
+    const baris = Object.entries(sumber).map(([id, s]) => ({ id, s, n: s.filter((x) => !x.tiada).length, ada: s.filter((x) => x.ada).length, nTiada: s.filter((x) => x.tiada).length, jenisTiada: s.find((x) => x.tiada)?.tiada }))
       .sort((a, b) => (b.n - b.ada) - (a.n - a.ada) || nama(a.id).localeCompare(nama(b.id), 'ms', { numeric: true }));
 
     $('isi').innerHTML = `
@@ -134,11 +150,12 @@
         <table class="jadual-data jadual-kad">
           <thead><tr><th>${paparan === 'guru' ? 'Guru' : 'Kelas'}</th><th>Diisi</th><th style="width:30%">Kemajuan</th><th>Sesi belum diisi</th></tr></thead>
           <tbody>${baris.map((r) => {
-            const pc = Math.round((r.ada / r.n) * 100);
-            const belum = r.s.filter((x) => !x.ada);
+            const pc = r.n ? Math.round((r.ada / r.n) * 100) : 100;
+            const belum = r.s.filter((x) => !x.ada && !x.tiada);
+            const lencanaTiada = r.nTiada ? ` <span class="lencana ${r.jenisTiada}">${r.jenisTiada === 'rasmi' ? '🏛️' : '🏠'} ${JENIS_TIADA[r.jenisTiada]} · ${r.nTiada} sesi</span>` : '';
             return `<tr>
               <td>${paparan === 'guru' ? `<a href="../guru/index.html?lihat=${encodeURIComponent(r.id)}&m=${laporan.t}" style="font-weight:700;color:inherit">${esc(nama(r.id))}</a>` : `<b>${esc(nama(r.id))}</b>`}${paparan === 'guru' ? `<div class="kecil lembut">${esc(jadual.guru[r.id]?.ringkas || '')}</div>` : ''}</td>
-              <td data-label="Diisi"><b>${r.ada}</b> / ${r.n}</td>
+              <td data-label="Diisi"><b>${r.ada}</b> / ${r.n}${lencanaTiada}</td>
               <td data-label="Kemajuan"><div class="bar-maju" style="margin:0"><i style="width:${pc}%;background:${pc === 100 ? 'var(--utama-2)' : pc >= 50 ? 'var(--aksen)' : 'var(--bahaya)'}"></i></div></td>
               <td data-label="Belum">${belum.length ? `<details><summary class="kecil" style="cursor:pointer">${belum.length} sesi</summary>${belum.map((s) => barisSesi(s, paparan === 'kelas')).join('')}</details>` : '<span class="lencana">Lengkap ✓</span>'}</td>
             </tr>`;
@@ -150,7 +167,7 @@
     $('csv').onclick = () => {
       const kepala = ['Tarikh', 'Mula', 'Tamat', 'Waktu', 'Kelas', 'Subjek', 'Guru', 'Status'];
       const isi = sesi.map((s) => [laporan.t, s.mula, s.tamat, s.waktu.join('-'), jadual.kelas[s.kelas]?.nama, jadual.subjek[s.subjek]?.nama,
-        s.guru.map((g) => jadual.guru[g]?.nama).join(' / '), s.ada ? 'Diisi' : 'Belum']);
+        s.guru.map((g) => jadual.guru[g]?.nama).join(' / '), s.ada ? 'Diisi' : s.tiada ? JENIS_TIADA[s.tiada] : 'Belum']);
       const csv = [kepala, ...isi].map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));

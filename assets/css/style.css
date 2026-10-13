@@ -519,3 +519,14 @@ a.sesi:hover { border-color: var(--utama-2); }
 .bahan-item .isi a { font-weight: 700; color: var(--teks); text-decoration: none; word-break: break-word; }
 .bahan-item .isi a:hover { color: var(--utama); text-decoration: underline; }
 .bahan-item.baru { background: var(--utama-cair); outline: 1px solid #b7dccd; }
+/* Cuti & Rasmi */
+.lencana.cuti { background: #efe7fb; color: #5b3a96; }
+.lencana.rasmi { background: #e3eefc; color: #23548f; }
+.rekod-tiada { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--bg); margin-bottom: 6px; }
+.rekod-tiada .isi { flex: 1; min-width: 0; }
+.rekod-tiada.lepas { opacity: .65; }
+.sesi-cip.cuti, .sesi-cip.rasmi { border-style: solid; }
+.sesi-cip.cuti { background: #efe7fb; border-color: #d6c5f2; color: #5b3a96; }
+.sesi-cip.rasmi { background: #e3eefc; border-color: #c3d8f5; color: #23548f; }
+.gm-sesi.tiada { background: #f1edf8; border: 1px dashed #c9b8e8; color: #6a5a86; }
+.sesi.tiada .masa { background: #efe7fb; color: #5b3a96; }

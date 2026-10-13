@@ -55,6 +55,28 @@ service cloud.firestore {
       allow delete: if lulus() || (masuk() && resource.data.uid == request.auth.uid);
     }
 
+    // ---------- Cuti & Urusan Rasmi guru ----------
+    // Rekod awam (tanpa sebab): untuk sembunyi slot guru yang tiada di halaman kelas
+    function bolehUrusTiada(guruId) { return lulus() && (admin() || profil().guruId == guruId); }
+    function sahTiada(d) {
+      return d.guruId is string && d.tarikh is string && d.tarikh.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && (d.waktu == null || d.waktu is list);
+    }
+    match /ketiadaan/{id} {
+      allow read: if true;
+      allow create, update: if bolehUrusTiada(request.resource.data.guruId) && sahTiada(request.resource.data)
+        && request.resource.data.keys().hasOnly(['guruId', 'tarikh', 'waktu']);
+      allow delete: if bolehUrusTiada(resource.data.guruId);
+    }
+    // Rekod penuh (Cuti / Rasmi + catatan): hanya admin & guru itu sendiri
+    match /ketiadaanInfo/{id} {
+      allow read: if bolehUrusTiada(resource.data.guruId);
+      allow create, update: if bolehUrusTiada(request.resource.data.guruId) && sahTiada(request.resource.data)
+        && request.resource.data.jenis in ['cuti', 'rasmi']
+        && (!('catatan' in request.resource.data) || request.resource.data.catatan.size() <= 300);
+      allow delete: if bolehUrusTiada(resource.data.guruId);
+    }
+
     // ---------- Daftar awal oleh admin (ID dokumen = emel huruf kecil) ----------
     match /jemputan/{e} {
       allow read: if admin() || (masuk() && emel() == e);

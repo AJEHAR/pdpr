@@ -49,7 +49,7 @@
 <script type="module">
   import { kawal, guruDilihat } from '../assets/js/auth.js';
   import { pasangApp, pasangJalurLihat, esc, ikon, namaCantik, hariIni, tambahHari, isninMinggu, formatTarikh } from '../assets/js/ui.js';
-  import { muatJadual, muatJadualUntuk, kalendarPdpr, kelasTerlibat, bahanJulat, petaSiapGuru, siapUntuk, modKongsi, muatTetapan, hantaranJulat, kiraHantaran } from '../assets/js/data.js';
+  import { muatJadual, muatJadualUntuk, kalendarPdpr, kelasTerlibat, bahanJulat, petaSiapGuru, siapUntuk, modKongsi, muatTetapan, hantaranJulat, kiraHantaran, tiadaJulat, infoTiadaJulat, petaTiada, guruTiada, JENIS_TIADA } from '../assets/js/data.js';
   import { sesiHari, HARI, labelWaktu, gabungKamus } from '../assets/js/jadual.js';
 
   const sesiAuth = await kawal('guru', { perluGuru: true });
@@ -68,7 +68,7 @@
     pasangJalurLihat(GID, namaCantik(saya?.nama || GID), 'jadual');
     $('sapa').textContent = `Jadual ${namaCantik(saya?.nama || '?').split(' ').slice(0, 3).join(' ')}`;
   } else {
-    $('sapa').textContent = `Salam, ${namaCantik(saya?.nama || profil.nama).split(' ').slice(0, 2).join(' ')}`;
+    $('sapa').textContent = `Salam, ${namaCantik(saya?.nama || profil.nama).split(/\s+(?:bin|binti|bt|b\.|a\/l|a\/p)\s+/i)[0].split(' ').slice(0, 2).join(' ')}`;
   }
 
   const kini = hariIni();
@@ -97,6 +97,8 @@
 
     const [status, bahan, jMap, hantaran, tetapan] = await Promise.all([kalendarPdpr(tarikh[0], tarikh[4], tarikh), bahanJulat(tarikh[0], tarikh[4], GID), muatJadualUntuk(tarikh),
       hantaranJulat(tarikh[0], tarikh[4], GID).catch(() => []), muatTetapan()]);
+    const [tAwam, tInfo] = await Promise.all([tiadaJulat(tarikh[0], tarikh[4]), infoTiadaJulat(tarikh[0], tarikh[4], GID)]);
+    const tiada = petaTiada(tAwam.filter((r) => r.guruId === GID), tInfo);
     const MOD = modKongsi(tetapan);
     const nMurid = kiraHantaran(hantaran); // { 'tarikh|sesi': bilangan murid }
     const K = gabungKamus([...Object.values(jMap), jadual]); // nama dari semua versi yang terlibat
@@ -111,11 +113,13 @@
         const st = siapUntuk(siap, t, s.id, GID, MOD);
         const ada = st.siap;
         // 'rakan' = dikira siap kerana guru lain (slot berkongsi) sudah upload
-        const keadaan = !pdpr ? 'bukan' : ada ? (st.sendiri ? 'ada' : 'rakan') : 'belum';
+        const td = pdpr && !ada ? guruTiada(tiada, t, GID, s) : null;
+        const jenisTiada = td ? (td.jenis || 'cuti') : null;
+        const keadaan = !pdpr ? 'bukan' : ada ? (st.sendiri ? 'ada' : 'rakan') : td ? 'tiada' : 'belum';
         const olehLain = !st.sendiri && st.oleh.length ? kodGuru(st.oleh) : '';
-        if (pdpr) { jumlah++; if (ada) diisi++; else if (t === kini) hariIniBelum++; }
+        if (pdpr && !td) { jumlah++; if (ada) diisi++; else if (t === kini) hariIniBelum++; }
         const bilBahan = bahan.filter((b) => b.tarikh === t && (b.sesi || []).includes(s.id));
-        return { ...s, keadaan, olehLain, bahan: bilBahan, murid: nMurid[t + '|' + s.id] || 0 };
+        return { ...s, keadaan, olehLain, jenisTiada, bahan: bilBahan, murid: nMurid[t + '|' + s.id] || 0 };
       });
       return { t, h, status: status[t], sesi, belum: sesi.filter((s) => s.keadaan === 'belum').length };
     });
@@ -153,6 +157,7 @@
           return `<${tag} class="gm-sesi ${s.keadaan}" style="flex:1" ${tag === 'a' ? `href="${pautanUpload(d.t, s)}"` : ''}
             title="${esc(namaSubjek(s, true))} · ${esc(namaKelas(s))} · ${s.harian ? 'Sepanjang hari' : s.mula + '–' + s.tamat}">
             <b>${esc(namaKelas(s))}</b><span>${esc(namaSubjek(s))}${s.kumpulan.length ? ' · ' + esc(s.kumpulan.join('/')) : ''}${s.murid ? ` · 📥${s.murid}` : ''}</span>
+            ${s.keadaan === 'tiada' ? `<span class="oleh">${s.jenisTiada === 'rasmi' ? '🏛️' : '🏠'} ${JENIS_TIADA[s.jenisTiada]}</span>` : ''}
             ${s.olehLain && s.keadaan !== 'bukan' ? `<span class="oleh">${s.keadaan === 'rakan' ? '✓ oleh' : 'Sudah oleh'} ${esc(s.olehLain)}</span>` : ''}</${tag}>`;
         }).join('') + `</div>`;
       }
@@ -164,6 +169,7 @@
           <span><i style="background:var(--utama-cair);border:1px solid #b7dccd"></i>Sudah diisi</span>
           <span><i style="background:var(--utama-cair);border:1px dashed #8fc4b0"></i>Diisi oleh guru lain (slot berkongsi)</span>
           <span><i style="background:var(--aksen-cair);border:1px solid #f1d29e"></i>Belum diisi</span>
+          <span><i style="background:#f1edf8;border:1px dashed #c9b8e8"></i>Cuti / Rasmi (tidak dikira)</span>
           <span><i style="background:var(--kelabu-cair)"></i>Bukan hari PDPR</span>
         </div>
       </div>`;
@@ -186,6 +192,7 @@
       const d = hari.find((x) => x.t === hariMobile);
       let html = `<div class="tajuk-hari"><h2>${esc(formatTarikh(d.t))}</h2>
         ${d.status.aktif ? `<span class="lencana ${d.belum ? 'amaran' : ''}">${d.belum ? `${d.belum} belum diisi` : 'Semua diisi ✓'}</span>` : `<span class="lencana tiada">Bukan hari PDPR</span>`}</div>`;
+      if (!LIHAT && d.status.aktif && !d.sesi.some((x) => x.keadaan === 'tiada')) html += `<p class="kecil" style="margin:-4px 0 10px"><a href="cuti.html?t=${d.t}">🏠 Cuti / 🏛️ Rasmi hari ini? Rekod di sini →</a></p>`;
       if (d.status.catatan) html += `<div class="notis info">${esc(d.status.catatan)}</div>`;
       if (!d.sesi.length) html += `<div class="kosong"><div class="ikon">☕</div><p>Tiada kelas pada hari ini.</p></div>`;
       else {
@@ -197,6 +204,7 @@
           const ket = s.keadaan === 'ada'
             ? `<span class="lencana">✓ ${s.bahan.length} bahan</span>`
             : s.keadaan === 'rakan' ? `<span class="lencana rakan">✓ Diisi oleh ${esc(s.olehLain)}</span>`
+            : s.keadaan === 'tiada' ? `<span class="lencana ${s.jenisTiada}">${s.jenisTiada === 'rasmi' ? '🏛️' : '🏠'} ${JENIS_TIADA[s.jenisTiada]} · tidak dikira</span>`
             : s.keadaan === 'belum' ? `<span class="lencana amaran">${ikon('upload', 14)} Belum diisi</span>${s.olehLain ? ` <span class="lencana tiada">${esc(s.olehLain)} sudah upload</span>` : ''}` : `<span class="lencana tiada">Bukan PDPR</span>`;
           return pisah + `<${tag} class="sesi ${s.keadaan}" ${tag === 'a' ? `href="${pautanUpload(d.t, s)}"` : ''}>
             <div class="masa"><b>${s.mula}</b><small>${s.tamat}</small><small>${labelWaktu(s.waktu).replace('Waktu ', 'W')}</small></div>
