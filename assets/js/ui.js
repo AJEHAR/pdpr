@@ -215,5 +215,7 @@ export function mesejRalat(e) {
   if (k.includes('unavailable') || k.includes('network')) return 'Tiada sambungan internet. Cuba lagi.';
   if (k === 'auth/popup-closed-by-user' || k === 'auth/cancelled-popup-request') return 'Log masuk dibatalkan.';
   if (k === 'auth/unauthorized-domain') return 'Domain laman ini belum dibenarkan dalam Firebase (Authorized domains).';
+  if (k === 'auth/admin-restricted-operation' || k === 'auth/operation-not-allowed')
+    return 'Sistem hantar kerja belum diaktifkan oleh sekolah. Sila maklumkan kepada guru.';
   return e?.message || String(e);
 }

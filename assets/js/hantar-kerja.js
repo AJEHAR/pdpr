@@ -129,7 +129,7 @@ export function bukaBorangKerja({ tarikh, sesi, kelasId, jd, tetapan, onSiap }) 
 
     let uid;
     try { ({ uid } = await tokenTanpaNama()); }
-    catch (e) { toast('Gagal menyambung: ' + mesejRalat(e), 'ralat'); btn.disabled = false; return; }
+    catch (e) { console.error(e); toast(mesejRalat(e), 'ralat'); btn.disabled = false; return; }
 
     const asas = {
       tarikh, sesi: sesi.id, kelasId, subjekId: sesi.subjek, guruIds: sesi.guru,
