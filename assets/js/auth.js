@@ -122,7 +122,17 @@ export async function kawal(perlu = 'guru', pilihan = {}) {
   const balik = encodeURIComponent(location.pathname.split('/').slice(-2).join('/') + location.search);
   if (!u) { location.replace(`${akar}login.html?ke=${balik}`); return new Promise(() => {}); }
 
-  const profil = await pastikanProfil(u);
+  let profil;
+  try {
+    profil = await Promise.race([
+      pastikanProfil(u),
+      new Promise((_, gagal) => setTimeout(() => gagal(Object.assign(new Error('Pelayan Firebase tidak memberi respons (15 saat).'), { code: 'masa-tamat' })), 15000)),
+    ]);
+  } catch (e) {
+    console.error('Gagal membaca profil', e);
+    paparRalatHalaman(e);
+    return new Promise(() => {});
+  }
   if (!profil) { location.replace(`${akar}daftar.html`); return new Promise(() => {}); }
 
   if (perlu === 'admin' && !adalahAdmin(profil)) { location.replace(`${akar}guru/index.html`); return new Promise(() => {}); }
@@ -142,4 +152,20 @@ export function guruDilihat(profil) {
 /** Halaman pertama selepas log masuk */
 export function halamanUtama(profil) {
   return profil.guruId ? 'guru/index.html' : 'admin/index.html';
+}
+
+/** Papar ralat yang jelas di halaman (bukannya tersekat pada "Memuatkan…") */
+export function paparRalatHalaman(e) {
+  const k = e?.code || '', m = e?.message || String(e);
+  const sebab = k.includes('resource-exhausted') || /quota/i.test(m)
+    ? 'Kuota harian Firebase telah habis. Laman akan pulih selepas <b>pukul 3 petang</b> (waktu Malaysia), atau admin boleh naik taraf ke pelan Blaze.'
+    : k.includes('permission-denied') ? 'Akses ditolak oleh Firestore Rules. Admin perlu semak dan Publish <i>firestore.rules</i> terkini.'
+    : k.includes('unavailable') || k === 'masa-tamat' || /offline|network/i.test(m) ? 'Tidak dapat menghubungi pelayan Firebase. Semak sambungan internet, atau kuota harian Firebase mungkin telah habis.'
+    : 'Ralat tidak dijangka semasa memuatkan data.';
+  const kotak = document.querySelector('main') || document.body;
+  kotak.innerHTML = `<div class="kad kotak-masuk" style="text-align:center">
+    <div style="font-size:2.4rem">⚠️</div><h2>Data tidak dapat dimuatkan</h2>
+    <p>${sebab}</p>
+    <p class="kecil lembut" style="word-break:break-word">Butiran: ${String(k || m).replace(/[<>&]/g, '')}</p>
+    <div class="butang-baris" style="justify-content:center"><button class="btn" onclick="location.reload()">Cuba lagi</button></div></div>`;
 }

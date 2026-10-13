@@ -221,6 +221,8 @@ export function toast(mesej, jenis = 'ok') {
 /** Paparkan ralat yang mesra pengguna */
 export function mesejRalat(e) {
   const k = e?.code || '';
+  if (k.includes('resource-exhausted') || /quota/i.test(e?.message || ''))
+    return 'Kuota harian Firebase telah habis. Laman akan pulih selepas pukul 3 petang (waktu Malaysia), atau naik taraf ke pelan Blaze.';
   if (k.includes('permission-denied')) return 'Anda tiada kebenaran untuk tindakan ini.';
   if (k.includes('unavailable') || k.includes('network')) return 'Tiada sambungan internet. Cuba lagi.';
   if (k === 'auth/popup-closed-by-user' || k === 'auth/cancelled-popup-request') return 'Log masuk dibatalkan.';

@@ -12,6 +12,20 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <link rel="stylesheet" href="../assets/css/style.css">
+  <script>
+    // Papar ralat jika skrip halaman gagal (cth fail lama dalam cache), bukannya tersekat pada "Memuatkan…"
+    (function () {
+      var dah = false;
+      function papar(msg) {
+        if (dah) return; dah = true;
+        var m = document.querySelector('main');
+        if (!m || document.querySelector('.app-sisi, .sisi, nav.sidebar')) return;
+        m.insertAdjacentHTML('afterbegin', '<div class="notis bahaya" style="margin-top:12px"><b>Halaman gagal dimuatkan.</b> Tekan <b>Ctrl + Shift + R</b> (atau tutup &amp; buka semula aplikasi). <button class="btn kecil" style="margin-left:8px" onclick="location.reload(true)">Muat semula</button><div class="kecil" style="margin-top:6px;opacity:.75">' + String(msg).replace(/[<>&]/g, '') + '</div></div>');
+      }
+      addEventListener('error', function (e) { if (e.message) papar(e.message); });
+      addEventListener('unhandledrejection', function (e) { papar((e.reason && (e.reason.code || e.reason.message)) || e.reason); });
+    })();
+  </script>
 </head>
 <body>
 <main>
